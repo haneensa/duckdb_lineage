@@ -7,6 +7,8 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/client_data.hpp"
 
+
+#include <zlib.h>
 namespace duckdb {
 
 struct DuckDBQueriesListData : public GlobalTableFunctionState {

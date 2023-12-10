@@ -10,6 +10,8 @@
 #include "duckdb/execution/operator/join/physical_delim_join.hpp"
 #include <utility>
 
+#include <zlib.h>
+
 namespace duckdb {
 class PhysicalDelimJoin;
 

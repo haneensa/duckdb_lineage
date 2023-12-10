@@ -1,6 +1,9 @@
 #ifdef LINEAGE
 #include "duckdb/execution/lineage/operator_lineage.hpp"
 
+#include "miniz.hpp"
+#include "miniz_wrapper.hpp"
+#include <zlib.h>
 namespace duckdb {
 
 idx_t OperatorLineage::Size() {
@@ -186,12 +189,30 @@ void HALog::BuildIndexes() {
 	//if (sink_log[i].branch == 0) {
 		idx_t res_count = addchunk_log[i].count;
 		auto payload = addchunk_log[i].addchunk_lineage.get();
+		std::vector<Bytef> bytes;
+
 		for (idx_t j=0; j < res_count; ++j) {
 			hash_index[payload[j]].push_back(j + count_so_far);
+			const Bytef* bytePtr = reinterpret_cast<const Bytef*>(&payload[i] );
+			bytes.insert(bytes.end(), bytePtr, bytePtr + sizeof(data_ptr_t));
 		}
+		// Get the size of the original data
+		size_t originalSize = bytes.size();
+
+		std::vector<Bytef> compressedData;
+		uLongf compressedSize = duckdb_miniz::mz_compressBound(bytes.size());
+		compressedData.resize(compressedSize);
+		duckdb_miniz::mz_compress(&compressedData[0], &compressedSize, &bytes[0], bytes.size());
+		// Get the size of the compressed data
+		size_t compressedSizeActual = compressedSize;
+		// Print the original and compressed sizes
+		std::cout << res_count << " Original Size: " << originalSize << " bytes" << std::endl;
+		std::cout << "Compressed Size: " << compressedSizeActual << " bytes "  << (float)originalSize / compressedSizeActual << std::endl;
+
 		count_so_far += res_count;
 	//}
   }
+
 }
 
 

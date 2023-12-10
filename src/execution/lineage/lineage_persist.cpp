@@ -1,6 +1,11 @@
 #ifdef LINEAGE
 #include "duckdb/execution/lineage/operator_lineage.hpp"
 
+#include "miniz.hpp"
+#include "miniz_wrapper.hpp"
+#include <zlib.h>
+
+
 namespace duckdb {
 
 //! Get the column types for this operator
@@ -139,11 +144,26 @@ idx_t TableScanLog::GetLineageAsChunk(DataChunk &insert_chunk,
   idx_t child_offset = lineage[data_idx].start + lineage[data_idx].vector_index;
   data_ptr_t ptr = nullptr;
   if (lineage[data_idx].sel != nullptr) {
-    auto vec_ptr = lineage[data_idx].sel->owned_data.get();
+	  sel_t * vec_ptr = lineage[data_idx].sel->owned_data.get();
+	std::vector<Bytef> bytes;
     for (idx_t i = 0; i < res_count; i++) {
+			const Bytef* bytePtr = reinterpret_cast<const Bytef*>(&vec_ptr[i] );
+			bytes.insert(bytes.end(), bytePtr, bytePtr + sizeof(sel_t));
 			*(vec_ptr + i) += child_offset;
 		}
     ptr = (data_ptr_t)vec_ptr;
+	// Get the size of the original data
+	size_t originalSize = bytes.size();
+
+	std::vector<Bytef> compressedData;
+	uLongf compressedSize = duckdb_miniz::mz_compressBound(bytes.size());
+	compressedData.resize(compressedSize);
+	duckdb_miniz::mz_compress(&compressedData[0], &compressedSize, &bytes[0], bytes.size());
+	// Get the size of the compressed data
+	size_t compressedSizeActual = compressedSize;
+	// Print the original and compressed sizes
+	std::cout << res_count << " Original Size: " << originalSize << " bytes" << std::endl;
+	std::cout << "Compressed Size: " << compressedSizeActual << " bytes "  << (float)originalSize / compressedSizeActual << std::endl;
   }
   getchunk(res_count, global_count, insert_chunk,  ptr, child_offset);
 
