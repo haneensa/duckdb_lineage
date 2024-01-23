@@ -295,5 +295,15 @@ bool LineageManager::CheckIfShouldPersistForKSemimodule(PhysicalOperator *op) {
 	return persist_k_semimodule && op->child_of_aggregate;
 }
 
+void LineageManager::PostProcess(PhysicalOperator *op) {
+	// massage the data to make it easier to query
+	// for hash join, build hash table on the build side that map the address to id
+	// for group by, build hash table on the unique groups
+	if (op->lineage_op) {
+		op->lineage_op->PostProcess();
+	}
+}
+
+
 } // namespace duckdb
 #endif

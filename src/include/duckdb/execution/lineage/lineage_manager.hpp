@@ -56,6 +56,8 @@ public:
 		return current_lop;
 	}
 
+	static void PostProcess(PhysicalOperator* op);
+
 private:
 	//! cached operator lineage to be accessed from function calls that don't have access to operator members
 	shared_ptr<OperatorLineage> current_lop;
