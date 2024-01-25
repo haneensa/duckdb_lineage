@@ -49,7 +49,6 @@ void ReservoirSample::ReplaceElement(DataChunk &input, idx_t index_in_chunk) {
 
 #ifdef LINEAGE
 	if (input.trace_lineage) {
-		std::cout << "Capture for ReservoirSample: " << index_in_chunk << std::endl;
 		reinterpret_cast<SamplingLog*>(input.log_per_thread.get())->lineage.push_back({nullptr, input.size(), 1});
 	}
 #endif

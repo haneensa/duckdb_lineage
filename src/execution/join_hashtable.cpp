@@ -606,15 +606,9 @@ void ScanStructure::NextSemiOrAntiJoin(DataChunk &keys, DataChunk &left, DataChu
 	// create the selection vector from the matches that were found
 	SelectionVector sel(STANDARD_VECTOR_SIZE);
 	idx_t result_count = 0;
-#ifdef LINEAGE
-	unique_ptr<data_ptr_t[]> key_locations_lineage(new data_ptr_t[STANDARD_VECTOR_SIZE]);
-	auto ptrs = FlatVector::GetData<data_ptr_t>(this->pointers);
-#endif
+
 	for (idx_t i = 0; i < keys.size(); i++) {
 		if (found_match[i] == MATCH) {
-#ifdef LINEAGE
-			key_locations_lineage[result_count] = ptrs[i];
-#endif
 			// part of the result
 			sel.set_index(result_count++, i);
 		}
@@ -626,13 +620,21 @@ void ScanStructure::NextSemiOrAntiJoin(DataChunk &keys, DataChunk &left, DataChu
 		result.Slice(left, sel, result_count);
 #ifdef LINEAGE
 		if (keys.trace_lineage) {
-		  unique_ptr<sel_t[]> left = nullptr;
-		  if (result_count < STANDARD_VECTOR_SIZE) {
-			left = unique_ptr<sel_t[]>(new sel_t[result_count]);
-			std::copy(sel.data(), sel.data() + result_count, left.get());
-		  }
-		  auto log = reinterpret_cast<HashJoinLog*>(keys.log_per_thread.get());
-		  log->lineage_binary.push_back({move(left), move(key_locations_lineage), nullptr, 0, result_count, 0});
+			unique_ptr<data_ptr_t[]> key_locations_lineage(new data_ptr_t[STANDARD_VECTOR_SIZE]);
+			auto ptrs = FlatVector::GetData<data_ptr_t>(this->pointers);
+			for (idx_t i = 0; i < keys.size(); i++) {
+				if (found_match[i] == MATCH) {
+					key_locations_lineage[result_count] = ptrs[i];
+				}
+			}
+
+		  	unique_ptr<sel_t[]> left = nullptr;
+		  	if (result_count < STANDARD_VECTOR_SIZE) {
+				left = unique_ptr<sel_t[]>(new sel_t[result_count]);
+				std::copy(sel.data(), sel.data() + result_count, left.get());
+		 	 }
+		  	auto log = reinterpret_cast<HashJoinLog*>(keys.log_per_thread.get());
+		  	log->lineage_binary.push_back({move(left), move(key_locations_lineage), nullptr, 0, result_count, 0});
 		}
 #endif
 	} else {
@@ -683,25 +685,26 @@ void ScanStructure::ConstructMarkJoinResult(DataChunk &join_keys, DataChunk &chi
 			}
 		}
 	}
-#ifdef LINEAGE
-	unique_ptr<data_ptr_t[]> key_locations_lineage(new data_ptr_t[child.size()]);
-	auto ptrs = FlatVector::GetData<data_ptr_t>(this->pointers);
-#endif
+
 	// now set the remaining entries to either true or false based on whether a match was found
 	if (found_match) {
 		for (idx_t i = 0; i < child.size(); i++) {
 			bool_result[i] = found_match[i];
-#ifdef LINEAGE
-			if (found_match[i])
-				key_locations_lineage[i] = ptrs[i];
-#endif
 		}
 	} else {
 		memset(bool_result, 0, sizeof(bool) * child.size());
 	}
 #ifdef LINEAGE
 	if (join_keys.trace_lineage) {
-      auto log = reinterpret_cast<HashJoinLog*>(join_keys.log_per_thread.get());
+		unique_ptr<data_ptr_t[]> key_locations_lineage(new data_ptr_t[child.size()]);
+		auto ptrs = FlatVector::GetData<data_ptr_t>(this->pointers);
+		if (found_match) {
+			for (idx_t i = 0; i < child.size(); i++) {
+				if (found_match[i])
+					key_locations_lineage[i] = ptrs[i];
+			}
+		}
+		auto log = reinterpret_cast<HashJoinLog*>(join_keys.log_per_thread.get());
       log->lineage_binary.push_back({nullptr, move(key_locations_lineage), nullptr, 2, child.size(), 0});
 	}
 #endif
