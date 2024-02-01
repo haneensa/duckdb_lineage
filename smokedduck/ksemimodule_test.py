@@ -4,7 +4,7 @@ import sql_statements
 
 p1 = pd.DataFrame({'a': [42, 43, 44, 45], 'b': ['a', 'b', 'a', 'b']})
 p2 = pd.DataFrame({'b': ['a', 'a', 'c', 'b'], 'c': [4, 5, 6, 7]})
-con = smokedduck.connect(':default:')
+con = smokedduck.prov_connect(':default:')
 con.execute('create table t1 as (select * from p1)')
 con.execute('create table t2 as (select * from p2)')
 
