@@ -2,7 +2,7 @@ import smokedduck
 import pandas as pd
 
 # Creating connection
-con = smokedduck.connect(':default:')
+con = smokedduck.prov_connect(':default:')
 con.execute('CALL dbgen(sf=1);')
 con.execute('pragma threads=1')
 
