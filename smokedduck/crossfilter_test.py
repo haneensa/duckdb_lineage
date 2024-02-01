@@ -6,7 +6,7 @@ p1 = pd.DataFrame({
     'b': ['a', 'b', 'a', 'b', 'c', 'a', 'a', 'a', 'b'],
     'c': ['x', 'x', 'x', 'y', 'y', 'z', 'z', 'z', 'z']
 })
-con = smokedduck.connect(':default:')
+con = smokedduck.prov_connect(':default:')
 acon = con.cursor()
 bcon = con.cursor()
 ccon = con.cursor()
