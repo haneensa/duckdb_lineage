@@ -2,7 +2,7 @@ import smokedduck
 import pandas as pd
 
 # Creating connection
-con = smokedduck.connect(':default:')
+con = smokedduck.prov_connect(':default:')
 con.execute('CALL dbgen(sf=1);')
 
 fix_list = [2, 16, 18, 20, 21, 22]
