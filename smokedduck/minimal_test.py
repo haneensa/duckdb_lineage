@@ -2,7 +2,7 @@ import smokedduck
 import pandas as pd
 
 # Creating connection
-con = smokedduck.connect(':default:')
+con = smokedduck.prov_connect(':default:')
 
 # Loading example data
 p1 = pd.DataFrame({'a': [42, 43, 44, 45], 'b': ['a', 'b', 'a', 'b']})
