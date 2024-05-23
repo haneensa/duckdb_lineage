@@ -15,6 +15,10 @@ string PhysicalOperatorToString(PhysicalOperatorType type) {
 		return "COLUMN_DATA_SCAN";
 	case PhysicalOperatorType::DELIM_SCAN:
 		return "DELIM_SCAN";
+#ifdef LINEAGE
+  case PhysicalOperatorType::LINEAGE_SCAN:
+		return "LINEAGE_SCAN";
+#endif
 	case PhysicalOperatorType::ORDER_BY:
 		return "ORDER_BY";
 	case PhysicalOperatorType::LIMIT:

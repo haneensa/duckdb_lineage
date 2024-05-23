@@ -23,6 +23,10 @@
 #include "duckdb/planner/filter/conjunction_filter.hpp"
 #include "duckdb/planner/filter/struct_filter.hpp"
 
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+#endif
+
 namespace duckdb {
 
 RowGroup::RowGroup(RowGroupCollection &collection_p, idx_t start, idx_t count)
@@ -502,6 +506,11 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 					}
 				}
 			}
+#ifdef LINEAGE
+			if (lineage_manager->capture && active_log) {
+				active_log->row_group_log.push_back({nullptr, count, this->start, current_row});
+			}
+#endif
 		} else {
 			// partial scan: we have deletions or table filters
 			idx_t approved_tuple_count = count;
@@ -546,6 +555,11 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 				state.vector_index++;
 				continue;
 			}
+#ifdef LINEAGE
+			if (lineage_manager->capture && active_log) {
+				active_log->row_group_log.push_back({sel.sel_data(), approved_tuple_count, this->start, current_row});
+			}
+#endif
 			//! Now we use the selection vector to fetch data for the other columns.
 			for (idx_t i = 0; i < column_ids.size(); i++) {
 				if (!table_filters || table_filters->filters.find(i) == table_filters->filters.end()) {

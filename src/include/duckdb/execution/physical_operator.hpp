@@ -19,6 +19,10 @@
 #include "duckdb/execution/physical_operator_states.hpp"
 #include "duckdb/common/enums/order_preservation_type.hpp"
 
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/operator_lineage.hpp"
+#endif
+
 namespace duckdb {
 class Event;
 class Executor;
@@ -199,6 +203,10 @@ public:
 		}
 		return reinterpret_cast<const TARGET &>(*this);
 	}
+#ifdef LINEAGE 
+public:
+  shared_ptr<OperatorLineage> lop;
+#endif
 };
 
 //! Contains state for the CachingPhysicalOperator

@@ -2,6 +2,11 @@
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"
 #include "duckdb/parallel/thread_context.hpp"
+
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+#endif
+
 namespace duckdb {
 
 PhysicalFilter::PhysicalFilter(vector<LogicalType> types, vector<unique_ptr<Expression>> select_list,
@@ -44,9 +49,21 @@ OperatorResultType PhysicalFilter::ExecuteInternal(ExecutionContext &context, Da
 	auto &state = state_p.Cast<FilterState>();
 	idx_t result_count = state.executor.SelectExpression(input, state.sel);
 	if (result_count == input.size()) {
+#ifdef LINEAGE
+    if (lineage_manager->capture && active_log) {
+			active_log->filter_log.push_back({nullptr, result_count, active_lop->children[0]->out_start});
+		}
+#endif
 		// nothing was filtered: skip adding any selection vectors
 		chunk.Reference(input);
 	} else {
+#ifdef LINEAGE
+    if (lineage_manager->capture && active_log && result_count) {
+			unique_ptr<sel_t[]> sel_copy(new sel_t[result_count]);
+			std::copy(state.sel.data(), state.sel.data() + result_count, sel_copy.get());
+			active_log->filter_log.push_back({move(sel_copy), result_count, active_lop->children[0]->out_start});
+		}
+#endif
 		chunk.Slice(input, state.sel, result_count);
 	}
 	return OperatorResultType::NEED_MORE_INPUT;

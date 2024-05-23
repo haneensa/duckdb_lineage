@@ -39,6 +39,9 @@ void BuiltinFunctions::RegisterSQLiteFunctions() {
 	DuckDBViewsFun::RegisterFunction(*this);
 	TestAllTypesFun::RegisterFunction(*this);
 	TestVectorTypesFun::RegisterFunction(*this);
+#ifdef LINEAGE
+	DuckDBQueriesListFun::RegisterFunction(*this);
+#endif
 }
 
 } // namespace duckdb

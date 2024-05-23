@@ -6,6 +6,10 @@
 #include "duckdb/execution/operator/helper/physical_streaming_limit.hpp"
 #include "duckdb/main/config.hpp"
 
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+#endif
+
 namespace duckdb {
 
 PhysicalLimit::PhysicalLimit(vector<LogicalType> types, BoundLimitNode limit_val_p, BoundLimitNode offset_val_p,
@@ -204,6 +208,11 @@ bool PhysicalLimit::HandleOffset(DataChunk &input, idx_t &current_offset, idx_t 
 			}
 			// set up a slice of the input chunks
 			input.Slice(input, sel, chunk_count);
+#ifdef LINEAGE
+      if (lineage_manager->capture && active_log) {
+				active_log->limit_offset.push_back({start_position, chunk_count, current_offset});
+			}
+#endif
 		} else {
 			current_offset += input_size;
 			return false;
@@ -221,6 +230,11 @@ bool PhysicalLimit::HandleOffset(DataChunk &input, idx_t &current_offset, idx_t 
 		// instead of copying we just change the pointer in the current chunk
 		input.Reference(input);
 		input.SetCardinality(chunk_count);
+#ifdef LINEAGE
+    if (lineage_manager->capture && active_log) {
+			active_log->limit_offset.push_back({0, chunk_count, current_offset});
+		}
+#endif
 	}
 
 	current_offset += input_size;

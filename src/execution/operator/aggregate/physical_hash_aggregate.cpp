@@ -16,6 +16,9 @@
 #include "duckdb/planner/expression/bound_aggregate_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+#endif
 
 namespace duckdb {
 
@@ -771,11 +774,22 @@ SinkFinalizeType PhysicalHashAggregate::FinalizeInternal(Pipeline &pipeline, Eve
 		return FinalizeDistinct(pipeline, event, context, gstate_p);
 	}
 
+#ifdef LINEAGE
+    if (lineage_manager->capture && active_log) {
+      active_log->capture = true;
+    }
+#endif
 	for (idx_t i = 0; i < groupings.size(); i++) {
 		auto &grouping = groupings[i];
 		auto &grouping_gstate = gstate.grouping_states[i];
+    // TODO: get reference to the lineage artifacts for this grouping
 		grouping.table_data.Finalize(context, *grouping_gstate.table_state);
 	}
+#ifdef LINEAGE
+    if (lineage_manager->capture && active_log) {
+      active_log->capture = false;
+    }
+#endif
 	return SinkFinalizeType::READY;
 }
 

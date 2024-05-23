@@ -3,6 +3,10 @@
 #include "duckdb/common/types/row/row_layout.hpp"
 #include "duckdb/execution/operator/join/physical_hash_join.hpp"
 
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+#endif
+
 namespace duckdb {
 
 PerfectHashJoinExecutor::PerfectHashJoinExecutor(const PhysicalHashJoin &join_p, JoinHashTable &ht_p,
@@ -80,6 +84,11 @@ bool PerfectHashJoinExecutor::FullScanHashTable(LogicalType &key_type) {
 		data_collection.Gather(tuples_addresses, sel_tuples, key_count, output_col_idx, vector, sel_build, nullptr);
 	}
 
+#ifdef LINEAGE
+  if (lineage_manager->capture && active_log && key_count) {
+		active_log->perfect_full_scan_ht_log.push_back({sel_build.sel_data(), sel_tuples.sel_data(), move(tuples_addresses.GetBuffer()), key_count, ht.Count()});
+	}
+#endif
 	return true;
 }
 
@@ -195,6 +204,20 @@ OperatorResultType PerfectHashJoinExecutor::ProbePerfectHashTable(ExecutionConte
 		result_vector.Reference(build_vec);
 		result_vector.Slice(state.build_sel_vec, probe_sel_count);
 	}
+#ifdef LINEAGE
+  if (lineage_manager->capture && active_log && probe_sel_count) {
+    unique_ptr<sel_t[]> right = nullptr;
+    right = unique_ptr<sel_t[]>(new sel_t[probe_sel_count]);
+    std::copy(state.build_sel_vec.data(), state.build_sel_vec.data() + probe_sel_count, right.get());
+
+    unique_ptr<sel_t[]> left = nullptr;
+    if (probe_sel_count < STANDARD_VECTOR_SIZE) {
+      left = unique_ptr<sel_t[]>(new sel_t[probe_sel_count]);
+      std::copy(state.probe_sel_vec.data(), state.probe_sel_vec.data() + probe_sel_count, left.get());
+    }
+    active_log->perfect_probe_ht_log.push_back({move(left), move(right), probe_sel_count, 0});
+	}
+#endif
 	return OperatorResultType::NEED_MORE_INPUT;
 }
 

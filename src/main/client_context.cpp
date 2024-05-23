@@ -45,6 +45,10 @@
 #include "duckdb/common/exception/transaction_exception.hpp"
 #include "duckdb/main/client_context_state.hpp"
 
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+#endif
+
 namespace duckdb {
 
 struct ActiveQueryContext {
@@ -137,6 +141,9 @@ struct DebugClientContextState : public ClientContextState {
 
 ClientContext::ClientContext(shared_ptr<DatabaseInstance> database)
     : db(std::move(database)), interrupted(false), client_data(make_uniq<ClientData>(*this)), transaction(*this) {
+#ifdef LINEAGE
+  if (lineage_manager == nullptr) lineage_manager = make_uniq<LineageManager>();
+#endif
 #ifdef DEBUG
 	registered_state["debug_client_context_state"] = make_uniq<DebugClientContextState>();
 #endif
@@ -215,6 +222,11 @@ ErrorData ClientContext::EndQueryInternal(ClientContextLock &lock, bool success,
 	active_query->progress_bar.reset();
 
 	D_ASSERT(active_query.get());
+#ifdef LINEAGE
+	if (lineage_manager && lineage_manager->capture && active_query->prepared && active_query->prepared->plan ) {
+		lineage_manager->StoreQueryLineage(*this, active_query->prepared->plan.get(),  active_query->query);
+	}
+#endif
 	active_query.reset();
 	query_progress.Initialize();
 	ErrorData error;

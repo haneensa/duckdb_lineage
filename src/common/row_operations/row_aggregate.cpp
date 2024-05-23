@@ -10,6 +10,10 @@
 #include "duckdb/common/types/row/tuple_data_layout.hpp"
 #include "duckdb/execution/operator/aggregate/aggregate_object.hpp"
 
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+#endif
+
 namespace duckdb {
 
 void RowOperations::InitializeStates(TupleDataLayout &layout, Vector &addresses, const SelectionVector &sel,
@@ -73,9 +77,23 @@ void RowOperations::CombineStates(RowOperationsState &state, TupleDataLayout &la
 		return;
 	}
 
+
 	//	Move to the first aggregate states
 	VectorOperations::AddInPlace(sources, UnsafeNumericCast<int64_t>(layout.GetAggrOffset()), count);
 	VectorOperations::AddInPlace(targets, UnsafeNumericCast<int64_t>(layout.GetAggrOffset()), count);
+
+#ifdef LINEAGE
+	if (lineage_manager->capture && active_log) {
+		auto src_ptrs = FlatVector::GetData<data_ptr_t>(sources);
+		unique_ptr<data_ptr_t[]> src_copy(new data_ptr_t[count]);
+		std::copy(src_ptrs, src_ptrs + count , src_copy.get());
+
+		auto target_ptrs = FlatVector::GetData<data_ptr_t>(targets);
+		unique_ptr<data_ptr_t[]> target_copy(new data_ptr_t[count]);
+		std::copy(target_ptrs, target_ptrs + count , target_copy.get());
+		active_log->combine_log.push_back({move(src_copy), move(target_copy), count});
+	}
+#endif
 
 	// Keep track of the offset
 	idx_t offset = layout.GetAggrOffset();
@@ -105,8 +123,18 @@ void RowOperations::FinalizeStates(RowOperationsState &state, TupleDataLayout &l
 	Vector addresses_copy(LogicalType::POINTER);
 	VectorOperations::Copy(addresses, addresses_copy, result.size(), 0, 0);
 
+
 	//	Move to the first aggregate state
 	VectorOperations::AddInPlace(addresses_copy, UnsafeNumericCast<int64_t>(layout.GetAggrOffset()), result.size());
+
+#ifdef LINEAGE
+	if (lineage_manager->capture && active_log) {
+		auto ptrs = FlatVector::GetData<data_ptr_t>(addresses);
+		unique_ptr<data_ptr_t[]> addresses_copy(new data_ptr_t[result.size()]);
+		std::copy(ptrs, ptrs + result.size() , addresses_copy.get());
+		active_log->finalize_states_log.push_back({move(addresses_copy), result.size()});
+	}
+#endif
 
 	auto &aggregates = layout.GetAggregates();
 	for (idx_t i = 0; i < aggregates.size(); i++) {

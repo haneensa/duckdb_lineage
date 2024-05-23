@@ -214,6 +214,7 @@ void TupleDataCollection::AppendUnified(TupleDataPinState &pin_state, TupleDataC
 	}
 
 	Build(pin_state, chunk_state, 0, actual_append_count);
+
 	Scatter(chunk_state, new_chunk, append_sel, actual_append_count);
 }
 

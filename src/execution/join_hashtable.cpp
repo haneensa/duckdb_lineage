@@ -7,6 +7,10 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
 
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+#endif
+
 namespace duckdb {
 
 using ValidityBytes = JoinHashTable::ValidityBytes;
@@ -215,8 +219,18 @@ void JoinHashTable::Build(PartitionedTupleDataAppendState &append_state, DataChu
 	source_chunk.data[col_offset].Reference(hash_values);
 	hash_values.ToUnifiedFormat(source_chunk.size(), append_state.chunk_state.vector_data.back().unified);
 
+#ifdef LINEAGE
+    if (lineage_manager->capture && active_log && added_count) {
+      active_log->capture = true;
+    }
+#endif
 	// We already called TupleDataCollection::ToUnifiedFormat, so we can AppendUnified here
 	sink_collection->AppendUnified(append_state, source_chunk, *current_sel, added_count);
+#ifdef LINEAGE
+    if (lineage_manager->capture && active_log && added_count) {
+      active_log->capture = false;
+    }
+#endif
 }
 
 idx_t JoinHashTable::PrepareKeys(DataChunk &keys, vector<TupleDataVectorFormat> &vector_data,
@@ -527,6 +541,16 @@ void ScanStructure::NextInnerJoin(DataChunk &keys, DataChunk &left, DataChunk &r
 				D_ASSERT(vector.GetType() == ht.layout.GetTypes()[output_col_idx]);
 				GatherResult(vector, result_vector, result_count, output_col_idx);
 			}
+#ifdef LINEAGE
+			if (lineage_manager->capture && active_log) {
+				auto ptrs = FlatVector::GetData<data_ptr_t>(pointers);
+				unique_ptr<data_ptr_t[]> rhs_ptrs(new data_ptr_t[count]);
+				std::copy(ptrs, ptrs + count , rhs_ptrs.get());
+				unique_ptr<sel_t[]> sel_copy(new sel_t[count]);
+				std::copy(result_vector.data(), result_vector.data() + count, sel_copy.get());
+				active_log->join_gather_log.push_back({move(rhs_ptrs), move(sel_copy), count, active_lop->children[0]->out_start});
+			}
+#endif
 		}
 		AdvancePointers();
 	}
@@ -571,6 +595,17 @@ void ScanStructure::NextSemiOrAntiJoin(DataChunk &keys, DataChunk &left, DataChu
 		// we only return the columns on the left side
 		// reference the columns of the left side from the result
 		result.Slice(left, sel, result_count);
+#ifdef LINEAGE
+		if (lineage_manager->capture && active_log) {
+			//auto ptrs = FlatVector::GetData<data_ptr_t>(pointers);
+			//unique_ptr<data_ptr_t[]> rhs_ptrs(new data_ptr_t[result_count]);
+			//std::copy(ptrs, ptrs + result_count , rhs_ptrs.get());
+			unique_ptr<sel_t[]> sel_copy(new sel_t[result_count]);
+			std::copy(sel.data(), sel.data() + result_count, sel_copy.get());
+			//active_log->join_gather_log.push_back({move(rhs_ptrs), move(sel_copy), result_count, active_lop->children[0]->out_start});
+			active_log->join_gather_log.push_back({nullptr, move(sel_copy), result_count, active_lop->children[0]->out_start});
+		}
+#endif
 	} else {
 		D_ASSERT(result.size() == 0);
 	}
@@ -730,6 +765,16 @@ void ScanStructure::NextLeftJoin(DataChunk &keys, DataChunk &left, DataChunk &re
 			// have remaining tuples
 			// slice the left side with tuples that did not find a match
 			result.Slice(left, sel, remaining_count);
+#ifdef LINEAGE
+			if (lineage_manager->capture && active_log) {
+				unique_ptr<sel_t[]> sel_copy = nullptr;
+        if (remaining_count < STANDARD_VECTOR_SIZE) {
+          sel_copy = unique_ptr<sel_t[]>(new sel_t[remaining_count]);
+				  std::copy(sel.data(), sel.data() + remaining_count, sel_copy.get());
+        }
+				active_log->join_gather_log.push_back({nullptr, move(sel_copy), remaining_count, active_lop->children[0]->out_start});
+			}
+#endif
 
 			// now set the right side to NULL
 			for (idx_t i = left.ColumnCount(); i < result.ColumnCount(); i++) {
@@ -784,6 +829,16 @@ void ScanStructure::NextSingleJoin(DataChunk &keys, DataChunk &input, DataChunk 
 		GatherResult(vector, result_sel, result_sel, result_count, output_col_idx);
 	}
 	result.SetCardinality(input.size());
+#ifdef LINEAGE
+	if (lineage_manager->capture && active_log) {
+		auto ptrs = FlatVector::GetData<data_ptr_t>(pointers);
+    unique_ptr<data_ptr_t[]> rhs_ptrs(new data_ptr_t[result_count]);
+		std::copy(ptrs, ptrs + result_count , rhs_ptrs.get());
+		unique_ptr<sel_t[]> sel_copy(new sel_t[result_count]);
+		std::copy(result_sel.data(), result_sel.data() + result_count, sel_copy.get());
+		active_log->join_gather_log.push_back({move(rhs_ptrs), move(sel_copy), result_count, active_lop->children[0]->out_start});
+	}
+#endif
 
 	// like the SEMI, ANTI and MARK join types, the SINGLE join only ever does one pass over the HT per input chunk
 	finished = true;
@@ -851,6 +906,13 @@ void JoinHashTable::ScanFullOuter(JoinHTScanState &state, Vector &addresses, Dat
 		D_ASSERT(vector.GetType() == layout.GetTypes()[output_col_idx]);
 		data_collection->Gather(addresses, sel_vector, found_entries, output_col_idx, vector, sel_vector, nullptr);
 	}
+#ifdef LINEAGE
+	if (lineage_manager->capture && active_log) {
+    unique_ptr<data_ptr_t[]> rhs_ptrs(new data_ptr_t[found_entries]);
+		std::copy(key_locations, key_locations + found_entries, rhs_ptrs.get());
+		active_log->join_gather_log.push_back({move(rhs_ptrs), nullptr, found_entries, active_lop->children[0]->out_start});
+	}
+#endif
 }
 
 idx_t JoinHashTable::FillWithHTOffsets(JoinHTScanState &state, Vector &addresses) {

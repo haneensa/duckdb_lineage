@@ -8,6 +8,10 @@
 #include "duckdb/parallel/pipeline.hpp"
 #include "duckdb/parallel/thread_context.hpp"
 
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+#endif
+
 namespace duckdb {
 
 PhysicalRightDelimJoin::PhysicalRightDelimJoin(vector<LogicalType> types, unique_ptr<PhysicalOperator> original_join,
@@ -57,10 +61,18 @@ SinkResultType PhysicalRightDelimJoin::Sink(ExecutionContext &context, DataChunk
 	auto &lstate = input.local_state.Cast<RightDelimJoinLocalState>();
 
 	OperatorSinkInput join_sink_input {*join->sink_state, *lstate.join_state, input.interrupt_state};
+#ifdef LINEAGE
+	lineage_manager->Set(this->lop, (void*)&context.thread);
+#endif
 	join->Sink(context, chunk, join_sink_input);
 
 	OperatorSinkInput distinct_sink_input {*distinct->sink_state, *lstate.distinct_state, input.interrupt_state};
-	distinct->Sink(context, chunk, distinct_sink_input);
+	
+  distinct->Sink(context, chunk, distinct_sink_input);
+
+#ifdef LINEAGE
+	lineage_manager->Reset();
+#endif
 
 	return SinkResultType::NEED_MORE_INPUT;
 }
@@ -69,6 +81,10 @@ SinkCombineResultType PhysicalRightDelimJoin::Combine(ExecutionContext &context,
                                                       OperatorSinkCombineInput &input) const {
 	auto &lstate = input.local_state.Cast<RightDelimJoinLocalState>();
 
+#ifdef LINEAGE
+	lineage_manager->Set(this->lop, (void*)&context.thread);
+#endif
+
 	OperatorSinkCombineInput join_combine_input {*join->sink_state, *lstate.join_state, input.interrupt_state};
 	join->Combine(context, join_combine_input);
 
@@ -76,6 +92,9 @@ SinkCombineResultType PhysicalRightDelimJoin::Combine(ExecutionContext &context,
 	                                                 input.interrupt_state};
 	distinct->Combine(context, distinct_combine_input);
 
+#ifdef LINEAGE
+	lineage_manager->Reset();
+#endif
 	return SinkCombineResultType::FINISHED;
 }
 
@@ -84,11 +103,19 @@ SinkFinalizeType PhysicalRightDelimJoin::Finalize(Pipeline &pipeline, Event &eve
 	D_ASSERT(join);
 	D_ASSERT(distinct);
 
+#ifdef LINEAGE
+	lineage_manager->Set(this->lop, (void*)&client);
+#endif
+
 	OperatorSinkFinalizeInput join_finalize_input {*join->sink_state, input.interrupt_state};
 	join->Finalize(pipeline, event, client, join_finalize_input);
 
 	OperatorSinkFinalizeInput distinct_finalize_input {*distinct->sink_state, input.interrupt_state};
 	distinct->Finalize(pipeline, event, client, distinct_finalize_input);
+
+#ifdef LINEAGE
+	lineage_manager->Reset();
+#endif
 
 	return SinkFinalizeType::READY;
 }

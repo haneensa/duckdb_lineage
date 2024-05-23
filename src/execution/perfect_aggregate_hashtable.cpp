@@ -3,6 +3,10 @@
 #include "duckdb/common/row_operations/row_operations.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+#endif
+
 namespace duckdb {
 
 PerfectAggregateHashTable::PerfectAggregateHashTable(ClientContext &context, Allocator &allocator,
@@ -133,6 +137,15 @@ void PerfectAggregateHashTable::AddChunk(DataChunk &groups, DataChunk &payload) 
 		group_is_set[group] = true;
 		address_data[i] = uintptr_t(data) + group * tuple_size;
 	}
+
+#ifdef LINEAGE
+	if (lineage_manager->capture && active_log) {
+		auto ptrs = FlatVector::GetData<data_ptr_t>(addresses);
+		unique_ptr<data_ptr_t[]> addresses_copy(new data_ptr_t[groups.size()]);
+		std::copy(ptrs, ptrs + groups.size() , addresses_copy.get());
+		active_log->scatter_log.push_back({move(addresses_copy), groups.size()});
+	}
+#endif
 
 	// after finding the group location we update the aggregates
 	idx_t payload_idx = 0;

@@ -861,6 +861,9 @@ SourceResultType RadixPartitionedHashTable::GetData(ExecutionContext &context, D
 				chunk.data[null_group].SetVectorType(VectorType::CONSTANT_VECTOR);
 				ConstantVector::SetNull(chunk.data[null_group], true);
 			}
+#ifdef LINEAGE
+      // TODO: capture lineage
+#endif
 			ArenaAllocator allocator(BufferAllocator::Get(context.client));
 			for (idx_t i = 0; i < op.aggregates.size(); i++) {
 				D_ASSERT(op.aggregates[i]->GetExpressionClass() == ExpressionClass::BOUND_AGGREGATE);

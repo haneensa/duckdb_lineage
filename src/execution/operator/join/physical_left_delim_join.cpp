@@ -8,6 +8,11 @@
 #include "duckdb/parallel/pipeline.hpp"
 #include "duckdb/parallel/thread_context.hpp"
 
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+#endif
+
+
 namespace duckdb {
 
 PhysicalLeftDelimJoin::PhysicalLeftDelimJoin(vector<LogicalType> types, unique_ptr<PhysicalOperator> original_join,
@@ -85,18 +90,32 @@ SinkResultType PhysicalLeftDelimJoin::Sink(ExecutionContext &context, DataChunk 
 	auto &lstate = input.local_state.Cast<LeftDelimJoinLocalState>();
 	lstate.lhs_data.Append(lstate.append_state, chunk);
 	OperatorSinkInput distinct_sink_input {*distinct->sink_state, *lstate.distinct_state, input.interrupt_state};
+#ifdef LINEAGE
+	lineage_manager->Set(this->lop, (void*)&context.thread);
+#endif
 	distinct->Sink(context, chunk, distinct_sink_input);
+#ifdef LINEAGE
+	lineage_manager->Reset();
+#endif
 	return SinkResultType::NEED_MORE_INPUT;
 }
 
 SinkCombineResultType PhysicalLeftDelimJoin::Combine(ExecutionContext &context, OperatorSinkCombineInput &input) const {
 	auto &lstate = input.local_state.Cast<LeftDelimJoinLocalState>();
 	auto &gstate = input.global_state.Cast<LeftDelimJoinGlobalState>();
+#ifdef LINEAGE
+	lineage_manager->Set(this->lop, (void*)&context.thread);
+#endif
+	
 	gstate.Merge(lstate.lhs_data);
 
 	OperatorSinkCombineInput distinct_combine_input {*distinct->sink_state, *lstate.distinct_state,
 	                                                 input.interrupt_state};
 	distinct->Combine(context, distinct_combine_input);
+
+#ifdef LINEAGE
+	lineage_manager->Reset();
+#endif
 
 	return SinkCombineResultType::FINISHED;
 }

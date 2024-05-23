@@ -84,6 +84,13 @@ if (EXTENSION_STATIC_BUILD AND "${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
   endif()
 endif()
 
+option(BUILD_LINEAGE_EXTENSION "Build Lineage extension." FALSE)
+
+if(BUILD_LINEAGE_EXTENSION)
+  message(STATUS "Enable Lineage")
+  add_definitions(-DLINEAGE=1)
+endif()
+
 option(DISABLE_UNITY "Disable unity builds." FALSE)
 option(USE_WASM_THREADS "Should threads be used" FALSE)
 if (${USE_WASM_THREADS})
