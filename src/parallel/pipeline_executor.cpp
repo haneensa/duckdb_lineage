@@ -2,6 +2,10 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/common/limits.hpp"
 
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+#endif
+
 #ifdef DUCKDB_DEBUG_ASYNC_SINK_SOURCE
 #include <thread>
 #include <chrono>
@@ -335,8 +339,14 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 		return PipelineExecuteResult::INTERRUPTED;
 	}
 #endif
-	auto result = pipeline.sink->Combine(context, combine_input);
 
+#ifdef LINEAGE
+	lineage_manager->Set((void *)(pipeline.sink.get()), (void*)&context.thread);
+#endif
+	auto result = pipeline.sink->Combine(context, combine_input);
+#ifdef LINEAGE
+	lineage_manager->Reset();
+#endif
 	if (result == SinkCombineResultType::BLOCKED) {
 		return PipelineExecuteResult::INTERRUPTED;
 	}
@@ -508,10 +518,20 @@ void PipelineExecutor::StartOperator(PhysicalOperator &op) {
 	if (context.client.interrupted) {
 		throw InterruptException();
 	}
+#ifdef LINEAGE
+	lineage_manager->Set((void *)&op, (void*)&context.thread);
+#endif
 	context.thread.profiler.StartOperator(&op);
 }
 
 void PipelineExecutor::EndOperator(PhysicalOperator &op, optional_ptr<DataChunk> chunk) {
+#ifdef LINEAGE
+  if (lineage_manager->capture && active_lop && chunk) {
+    active_lop->out_start = active_lop->out_end;
+    active_lop->out_end += chunk->size() ;
+  }
+	lineage_manager->Reset();
+#endif
 	context.thread.profiler.EndOperator(chunk);
 
 	if (chunk) {

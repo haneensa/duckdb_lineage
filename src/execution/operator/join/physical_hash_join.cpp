@@ -17,6 +17,10 @@
 #include "duckdb/storage/storage_manager.hpp"
 #include "duckdb/storage/temporary_memory_manager.hpp"
 
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+#endif
+
 namespace duckdb {
 
 PhysicalHashJoin::PhysicalHashJoin(LogicalOperator &op, unique_ptr<PhysicalOperator> left,
@@ -497,6 +501,9 @@ SinkFinalizeType PhysicalHashJoin::Finalize(Pipeline &pipeline, Event &event, Cl
 		ht.Unpartition();
 	}
 
+#ifdef LINEAGE
+	lineage_manager->Set((void *)this, (void*)&context);
+#endif
 	// check for possible perfect hash table
 	auto use_perfect_hash = sink.perfect_join_executor->CanDoPerfectHashJoin();
 	if (use_perfect_hash) {
@@ -509,6 +516,12 @@ SinkFinalizeType PhysicalHashJoin::Finalize(Pipeline &pipeline, Event &event, Cl
 		sink.perfect_join_executor.reset();
 		sink.ScheduleFinalize(pipeline, event);
 	}
+#ifdef LINEAGE
+  if (lineage_manager->capture && active_log && !use_perfect_hash) {
+    active_log->perfect_full_scan_ht_log.clear();
+  }
+	lineage_manager->Reset();
+#endif
 	sink.finalized = true;
 	if (ht.Count() == 0 && EmptyResultIfRHSIsEmpty()) {
 		return SinkFinalizeType::NO_OUTPUT_POSSIBLE;

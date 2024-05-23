@@ -16,6 +16,10 @@
 #include "duckdb/parallel/task_scheduler.hpp"
 #include "duckdb/parallel/thread_context.hpp"
 
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+#endif
+
 #include <algorithm>
 
 namespace duckdb {
@@ -348,6 +352,9 @@ void Executor::Initialize(PhysicalOperator &plan) {
 }
 
 void Executor::InitializeInternal(PhysicalOperator &plan) {
+#ifdef LINEAGE
+  if (lineage_manager) lineage_manager->InitOperatorPlan(context, &plan);
+#endif
 
 	auto &scheduler = TaskScheduler::GetScheduler(context);
 	{

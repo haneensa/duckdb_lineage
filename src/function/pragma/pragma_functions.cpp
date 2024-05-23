@@ -13,6 +13,10 @@
 #include "duckdb/storage/buffer_manager.hpp"
 #include "duckdb/storage/storage_manager.hpp"
 
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+#endif
+
 #include <cctype>
 
 namespace duckdb {
@@ -122,6 +126,37 @@ static void PragmaDisableOptimizer(ClientContext &context, const FunctionParamet
 	ClientConfig::GetConfig(context).enable_optimizer = false;
 }
 
+#ifdef LINEAGE
+static void PragmaEnableLineage(ClientContext &context, const FunctionParameters &parameters) {
+  if (!lineage_manager) lineage_manager = make_uniq<LineageManager>();
+	lineage_manager->capture = true;
+  lineage_manager->persist = false;
+	std::cout << "\nEnable Lineage Capture" << std::endl;
+}
+
+static void PragmaDisableLineage(ClientContext &context, const FunctionParameters &parameters) {
+  if (lineage_manager) {
+    lineage_manager->capture = false;
+    lineage_manager->persist = false;
+  }
+	std::cout << "\nDisable Lineage Capture" << std::endl;
+}
+
+static void PragmaClearLineage(ClientContext &context, const FunctionParameters &parameters) {
+  if (lineage_manager) {
+    lineage_manager->persist = false;
+    lineage_manager->Clear();
+  }
+	std::cout << "\nClear Lineage" << std::endl;
+}
+
+static void PragmaPersistLineage(ClientContext &context, const FunctionParameters &parameters) {
+  if (lineage_manager) lineage_manager->persist = true;
+	std::cout << "\nEnable Persist Lineage" << std::endl;
+}
+
+#endif
+
 void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
 	RegisterEnableProfiling(set);
 
@@ -160,6 +195,12 @@ void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
 	set.AddFunction(PragmaFunction::PragmaStatement("enable_checkpoint_on_shutdown", PragmaEnableCheckpointOnShutdown));
 	set.AddFunction(
 	    PragmaFunction::PragmaStatement("disable_checkpoint_on_shutdown", PragmaDisableCheckpointOnShutdown));
+#ifdef LINEAGE
+	set.AddFunction(PragmaFunction::PragmaStatement("enable_lineage", PragmaEnableLineage));
+	set.AddFunction(PragmaFunction::PragmaStatement("disable_lineage", PragmaDisableLineage));
+	set.AddFunction(PragmaFunction::PragmaStatement("clear_lineage", PragmaClearLineage));
+	set.AddFunction(PragmaFunction::PragmaStatement("persist_lineage", PragmaPersistLineage));
+#endif
 }
 
 } // namespace duckdb

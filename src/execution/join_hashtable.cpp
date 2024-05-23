@@ -7,6 +7,10 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
 
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+#endif
+
 namespace duckdb {
 
 using ValidityBytes = JoinHashTable::ValidityBytes;
@@ -215,8 +219,18 @@ void JoinHashTable::Build(PartitionedTupleDataAppendState &append_state, DataChu
 	source_chunk.data[col_offset].Reference(hash_values);
 	hash_values.ToUnifiedFormat(source_chunk.size(), append_state.chunk_state.vector_data.back().unified);
 
+#ifdef LINEAGE
+    if (lineage_manager->capture && active_log && added_count) {
+      active_log->capture = true;
+    }
+#endif
 	// We already called TupleDataCollection::ToUnifiedFormat, so we can AppendUnified here
 	sink_collection->AppendUnified(append_state, source_chunk, *current_sel, added_count);
+#ifdef LINEAGE
+    if (lineage_manager->capture && active_log && added_count) {
+      active_log->capture = false;
+    }
+#endif
 }
 
 idx_t JoinHashTable::PrepareKeys(DataChunk &keys, vector<TupleDataVectorFormat> &vector_data,
@@ -527,6 +541,14 @@ void ScanStructure::NextInnerJoin(DataChunk &keys, DataChunk &left, DataChunk &r
 				D_ASSERT(vector.GetType() == ht.layout.GetTypes()[output_col_idx]);
 				GatherResult(vector, result_vector, result_count, output_col_idx);
 			}
+#ifdef LINEAGE
+			if (lineage_manager->capture && active_log) {
+				auto ptrs = FlatVector::GetData<data_ptr_t>(pointers);
+				unique_ptr<data_ptr_t[]> rhs_ptrs(new data_ptr_t[count]);
+				std::copy(ptrs, ptrs + count , rhs_ptrs.get());
+				active_log->join_gather_log.push_back({move(rhs_ptrs), result_vector.sel_data(), count});
+			}
+#endif
 		}
 		AdvancePointers();
 	}

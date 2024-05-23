@@ -190,6 +190,9 @@ custom_platform = os.environ.get('DUCKDB_CUSTOM_PLATFORM')
 if custom_platform is not None:
     define_macros.append(('DUCKDB_CUSTOM_PLATFORM', custom_platform))
 
+if "BUILD_LINEAGE" in os.environ:
+    toolchain_args.extend(['-DLINEAGE=1'])
+
 if platform.system() == 'Darwin':
     toolchain_args.extend(['-stdlib=libc++', '-mmacosx-version-min=10.7'])
 
