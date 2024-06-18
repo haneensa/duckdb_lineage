@@ -54,8 +54,8 @@ public:
   std::unordered_map<void*, shared_ptr<Log>> log;
   std::vector<void*> thread_vec;
   shared_ptr<LogIndex> log_index;
-  int out_start;
-  int out_end;
+  idx_t out_start;
+  idx_t out_end;
 };
 
 } // namespace duckdb
