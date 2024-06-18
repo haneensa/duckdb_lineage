@@ -444,4 +444,59 @@ unique_ptr<LogicalOperator> QueryGraphManager::LeftRightOptimizations(unique_ptr
 	return input_op;
 }
 
+// For table A   table B
+//     x | y     y | z
+//     -----     -----
+//     1 | a     a | 4
+//     1 | a     c | 5
+//     3 | b     a | 6
+// And query SELECT * FROM A SEMI JOIN B ON A.y = B.y
+// we want the result to be
+//     x | y
+//     -----
+//     1 | a
+//     1 | a
+// If we do just an inner join then we'll see duplication because of the multiple a in table B
+// If we perform a distinct aggregation over the result then we'll only see a single output row
+// So we need to perform the following algo:
+// 1. Project out only the relevant columns in B to get B'
+// 2. Perform a distinct aggregation over B' to get B''
+// 3. Inner join A and B'', projecting out only columns from A
+// IMPORTANT: This logic only works for hash-based equijoins and one-to-one or one-to-many joins
+unique_ptr<LogicalOperator> QueryGraphManager::UndoShortCircuiting(unique_ptr<LogicalOperator> op) {
+	for (idx_t i = 0; i < op->children.size(); i++) {
+		op->children[i] = UndoShortCircuiting(std::move(op->children[i]));
+	}
+
+	if (op->type == LogicalOperatorType::LOGICAL_COMPARISON_JOIN) {
+		auto &join = op->Cast<LogicalComparisonJoin>();
+
+		if (join.join_type == JoinType::SEMI) {
+			D_ASSERT(join.conditions.size() == 1);
+			D_ASSERT(join.conditions[0].comparison == ExpressionType::COMPARE_EQUAL);
+			D_ASSERT(join.conditions[0].right->type == ExpressionType::BOUND_COLUMN_REF);
+
+			// PROJECTION - implement as Filter avoid dealing with table index weirdness
+			unique_ptr<LogicalFilter> projection = make_uniq<LogicalFilter>();
+			projection->projection_map.push_back(join.conditions[0].right->Cast<BoundColumnRefExpression>().binding.column_index);
+			projection->children.push_back(std::move(op->children[1]));
+
+			// DISTINCT
+			unique_ptr<BoundColumnRefExpression> distinct_expr = make_uniq<BoundColumnRefExpression>(
+			    join.conditions[0].right->return_type,
+			    join.conditions[0].right->Cast<BoundColumnRefExpression>().binding
+			);
+			unique_ptr<LogicalDistinct> distinct = make_uniq<LogicalDistinct>(DistinctType::DISTINCT);
+			distinct->distinct_targets.push_back(std::move(distinct_expr));
+			distinct->children.push_back(std::move(projection));
+
+			// SEMIJOIN -> INNER JOIN
+			join.join_type = JoinType::INNER;
+			op->children[1] = std::move(distinct);
+		}
+	}
+
+	return op;
+}
+
 } // namespace duckdb
