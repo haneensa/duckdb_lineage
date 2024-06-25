@@ -23,7 +23,7 @@ parser.add_argument('--save_csv', action='store_true',  help="save result in csv
 parser.add_argument('--csv_append', action='store_true',  help="Append results to old csv")
 parser.add_argument('--sf', type=float, help="sf scale", default=1)
 parser.add_argument('--repeat', type=int, help="Repeat time for each query", default=1)
-parser.add_argument('--folder', type=str, help='queries folder', default='benchmark/smokedduck//')
+parser.add_argument('--folder', type=str, help='queries folder', default='benchmark/smokedduck-scripts/')
 args = parser.parse_args()
 args.profile = True
 print(args.profile)
@@ -51,7 +51,7 @@ else:
     lineage_type = "SD_Capture"
 # sf: 1, 5, 10, 20
 # threads: 1, 4, 8, 12, 16
-threads_list = [1, 4, 8, 16]
+threads_list = [1] #, 4, 8, 16]
 opt_queries = [2, 4, 15, 16, 17, 20, 21]
 dont_scale = [2, 4, 17, 20, 21] #, 4, 16, 17, 20, 21, 22]
 dont_scale_10 = [11, 22]
@@ -67,7 +67,7 @@ sf = args.sf
 con.execute("CALL dbgen(sf="+str(sf)+");")
 for th_id in threads_list:
     con.execute("PRAGMA threads="+str(th_id))
-    for i in range(1, 23):
+    for i in range(12, 13):
         if args.gprom and i not in gprom_list: continue
         if (args.perm and args.opt == False) and ((i in dont_scale) or (sf>10 and i in dont_scale_20) or (sf==10 and i in dont_scale_10)): continue
         if (args.gprom) and   (sf>10 and i in dont_scale_20 or i==1) or (sf==10 and i in dont_scale_10): continue
@@ -81,6 +81,7 @@ for th_id in threads_list:
         print("%%%%%%%%%%%%%%%% Running Query # ", i, " threads: ", th_id)
         print(query)
         avg, df = Run(query, args, con, table_name)
+        print(df)
         plan_timings = None
         if args.profile:
             plan_timings = parse_plan_timings(args.qid)

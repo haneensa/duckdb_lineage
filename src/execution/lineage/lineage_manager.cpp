@@ -51,7 +51,7 @@ int LineageManager::PlanAnnotator(PhysicalOperator *op, int counter) {
 
   if (op->type == PhysicalOperatorType::RESULT_COLLECTOR) {
 		PhysicalOperator* plan = &dynamic_cast<PhysicalResultCollector*>(op)->plan;
-    //std::cout << plan->ToString() << std::endl;
+    std::cout << plan->ToString() << std::endl;
 		counter = PlanAnnotator(plan, counter);
 	}
 
