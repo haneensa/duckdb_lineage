@@ -7,6 +7,10 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/execution/operator/join/outer_join_marker.hpp"
 
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+#endif
+
 namespace duckdb {
 
 PhysicalNestedLoopJoin::PhysicalNestedLoopJoin(LogicalOperator &op, unique_ptr<PhysicalOperator> left,
@@ -53,6 +57,11 @@ static void ConstructSemiOrAntiJoinResult(DataChunk &left, DataChunk &result, bo
 		// project them using the result selection vector
 		// reference the columns of the left side from the result
 		result.Slice(left, sel, result_count);
+#ifdef LINEAGE
+    if (lineage_manager->capture && active_log) {
+//		  active_log->row_group_log.push_back({sel.sel_data(), result_count, 0, active_lop->children[0]->out_start});
+    }
+#endif
 	} else {
 		result.SetCardinality(0);
 	}
@@ -405,6 +414,13 @@ OperatorResultType PhysicalNestedLoopJoin::ResolveComplexJoin(ExecutionContext &
 
 			chunk.Slice(input, lvector, match_count);
 			chunk.Slice(right_payload, rvector, match_count, input.ColumnCount());
+#ifdef LINEAGE
+      if (lineage_manager->capture && active_log) {
+        active_log->nlj_log.push_back({lvector.sel_data(), rvector.sel_data(), match_count, 
+             state.condition_scan_state.current_row_index, active_lop->children[0]->out_start});
+        active_log->SetLatestLSN({active_log->nlj_log.size(), 0});
+      }
+#endif
 		}
 
 		// check if we exhausted the RHS, if we did we need to move to the next right chunk in the next iteration
@@ -466,6 +482,19 @@ SourceResultType PhysicalNestedLoopJoin::GetData(ExecutionContext &context, Data
 
 	// if the LHS is exhausted in a FULL/RIGHT OUTER JOIN, we scan chunks we still need to output
 	sink.right_outer.Scan(gstate.scan_state, lstate.scan_state, chunk);
+#ifdef LINEAGE
+  if (lineage_manager->capture && active_log) {
+    //buffer_ptr<SelectionData> sel_copy = make_shared_ptr<SelectionData>(chunk.size());
+		unique_ptr<sel_t[]> sel_copy(new sel_t[chunk.size()]);
+		std::copy(lstate.scan_state.match_sel.data(),
+        lstate.scan_state.match_sel.data() + chunk.size(),
+        sel_copy.get());
+//sel_copy->owned_data.get());
+    active_log->row_group_log.push_back({move(sel_copy), chunk.size(),
+        lstate.scan_state.local_scan.current_row_index, active_lop->children[0]->out_start});
+    // TODO: add to latest
+  }
+#endif
 
 	return chunk.size() == 0 ? SourceResultType::FINISHED : SourceResultType::HAVE_MORE_OUTPUT;
 }

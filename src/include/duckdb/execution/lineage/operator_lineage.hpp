@@ -40,7 +40,7 @@ public:
 	idx_t GetLineageAsChunk(DataChunk &insert_chunk,
 	                        idx_t& global_count, idx_t& local_count,
 	                        idx_t &thread_id, idx_t &data_idx,  bool &cache);
-	idx_t GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count, DataChunk& chunk, int thread_id, shared_ptr<Log> log);
+	idx_t GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count, idx_t local_count, DataChunk& chunk, int thread_id, shared_ptr<Log> log);
 
 	void PostProcess();
 

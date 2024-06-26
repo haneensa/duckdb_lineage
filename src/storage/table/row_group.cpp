@@ -557,7 +557,10 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 			}
 #ifdef LINEAGE
 			if (lineage_manager->capture && active_log) {
-				active_log->row_group_log.push_back({sel.sel_data(), approved_tuple_count, this->start, current_row});
+			  unique_ptr<sel_t[]> sel_copy(new sel_t[approved_tuple_count]);
+			  std::copy(sel.data(), sel.data() + approved_tuple_count, sel_copy.get());
+				active_log->row_group_log.push_back({move(sel_copy), approved_tuple_count, this->start, current_row});
+				//active_log->row_group_log.push_back({sel.sel_data(), approved_tuple_count, this->start, current_row});
 			}
 #endif
 			//! Now we use the selection vector to fetch data for the other columns.

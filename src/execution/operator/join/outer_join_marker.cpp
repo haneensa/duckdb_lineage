@@ -1,5 +1,9 @@
 #include "duckdb/execution/operator/join/outer_join_marker.hpp"
 
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+#endif
+
 namespace duckdb {
 
 OuterJoinMarker::OuterJoinMarker(bool enabled_p) : enabled(enabled_p), count(0) {
@@ -59,6 +63,13 @@ void OuterJoinMarker::ConstructLeftJoinResult(DataChunk &left, DataChunk &result
 			result.data[idx].SetVectorType(VectorType::CONSTANT_VECTOR);
 			ConstantVector::SetNull(result.data[idx], true);
 		}
+#ifdef LINEAGE
+    if (lineage_manager->capture && active_log) {
+      active_log->nlj_log.push_back({remaining_sel.sel_data(), nullptr, remaining_count, 
+           0, active_lop->children[0]->out_start});
+      // TODO: add latest
+    }
+#endif
 	}
 }
 

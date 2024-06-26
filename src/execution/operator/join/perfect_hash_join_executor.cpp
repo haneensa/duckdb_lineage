@@ -215,7 +215,9 @@ OperatorResultType PerfectHashJoinExecutor::ProbePerfectHashTable(ExecutionConte
       left = unique_ptr<sel_t[]>(new sel_t[probe_sel_count]);
       std::copy(state.probe_sel_vec.data(), state.probe_sel_vec.data() + probe_sel_count, left.get());
     }
-    active_log->perfect_probe_ht_log.push_back({move(left), move(right), probe_sel_count, 0});
+   // std::cout << active_lop->operator_id << " perfect " << probe_sel_count << " " << active_lop->out_start << std::endl;
+    active_log->perfect_probe_ht_log.push_back({move(left), move(right), probe_sel_count, active_lop->children[0]->out_start});
+    active_log->SetLatestLSN({active_log->perfect_probe_ht_log.size(), 2});
 	}
 #endif
 	return OperatorResultType::NEED_MORE_INPUT;

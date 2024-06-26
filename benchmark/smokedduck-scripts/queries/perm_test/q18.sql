@@ -1,8 +1,9 @@
   select  out_index-1 as out_index,
-  c_rid as customer, o_rid as orders, l_rid as lineitem, l_rid2 as lineitem_2
+  c_rid as customer, o_rid as orders, l_rid as lineitem, l_rid2 as lineitem_1
   from (
+    select *, ROW_NUMBER() OVER (ORDER BY (SELECT o_totalprice) DESC, o_orderdate) AS out_index,
+    from (
         SELECT  
-      ROW_NUMBER() OVER (ORDER BY (SELECT 1)) AS out_index,
         c_name,  c_custkey,  o_orderkey,  o_orderdate,  o_totalprice,  sum(l_quantity) as sum_l_quantity
         FROM customer, orders, lineitem
         WHERE o_orderkey IN (
@@ -12,7 +13,7 @@
                 HAVING sum(l_quantity) > 300)
             AND c_custkey = o_custkey
             AND o_orderkey = l_orderkey
-        GROUP BY c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice
+        GROUP BY c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice)
   ) as q join  (
     select * from
     ( select *, customer.rowid as c_rid, 

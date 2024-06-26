@@ -544,8 +544,10 @@ void PipelineExecutor::StartOperator(PhysicalOperator &op) {
 void PipelineExecutor::EndOperator(PhysicalOperator &op, optional_ptr<DataChunk> chunk) {
 #ifdef LINEAGE
   if (lineage_manager->capture && active_lop && chunk) {
+    // TODO: make this local to the thread
     active_lop->out_start = active_lop->out_end;
     active_lop->out_end += chunk->size() ;
+    //std::cout << "EndOperator: " << active_lop->operator_id << " " -> active_lop->out_end << " " << chunk.size() << std::endl;
   }
 	lineage_manager->Reset();
 #endif

@@ -30,7 +30,7 @@ public:
 	vector<idx_t> vals;
 	vector<idx_t> vals_2; // for binary relations
   unordered_map<data_ptr_t, idx_t> codes;
-  unordered_map<idx_t, data_ptr_t> perfect_codes;
+  unordered_map<idx_t, idx_t> perfect_codes;
   idx_t offset;
 };
 
@@ -54,7 +54,8 @@ struct perfect_join_artifact {
 };
 
 struct scan_artifact {
-	buffer_ptr<SelectionData> sel;
+	//buffer_ptr<SelectionData> sel;
+	unique_ptr<sel_t[]> sel;
 	idx_t count;
 	idx_t start;
 	idx_t vector_index;
@@ -69,6 +70,7 @@ struct address_sel_artifact {
 	unique_ptr<data_ptr_t[]> addresses;
 	unique_ptr<sel_t[]> sel;
 	idx_t count;
+  idx_t in_start;
 };
 
 struct combine_artifact {
@@ -79,7 +81,6 @@ struct combine_artifact {
 
 struct join_gather_artifact {
 	unique_ptr<data_ptr_t[]> rhs;
-	//buffer_ptr<SelectionData> lhs;
 	unique_ptr<sel_t[]> lhs;
 	idx_t count;
   idx_t in_start;
@@ -93,6 +94,28 @@ struct perfect_full_scan_ht_artifact {
 	idx_t ht_count;
 };
 
+// Cross Product Log
+//
+struct cross_artifact {
+  // returns if the left side is scanned as a constant vector
+  idx_t branch_scan_lhs;
+  idx_t position_in_chunk;
+  idx_t scan_position;
+  idx_t count;
+  idx_t in_start;
+};
+
+// NLJ Log
+//
+struct nlj_artifact {
+  buffer_ptr<SelectionData> left;
+  buffer_ptr<SelectionData> right;
+  idx_t count;
+  idx_t current_row_index;
+  idx_t out_start;
+};
+
+
 //! Log
 /*!
     Log is xxx
@@ -100,6 +123,9 @@ struct perfect_full_scan_ht_artifact {
 class Log {
 public:
 	explicit Log() : capture(false) {}
+
+  std::pair<int, int> LatestLSN();
+  void SetLatestLSN(std::pair<int, int>);
 
 public:
   bool capture;
@@ -115,6 +141,13 @@ public:
 	vector<address_artifact> finalize_states_log;
 	vector<join_gather_artifact> join_gather_log;
   vector<vector<idx_t>> reorder_log;
+  vector<cross_artifact> cross_log;
+  vector<nlj_artifact> nlj_log;
+
+  vector<std::pair<int, int>> execute_internal;
+  vector<std::pair<int, int>> cached;
+
+  std::pair<int, int> latest;
 
 private:
 };

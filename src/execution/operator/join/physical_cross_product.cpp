@@ -4,6 +4,10 @@
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "duckdb/execution/operator/join/physical_join.hpp"
 
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+#endif
+
 namespace duckdb {
 
 PhysicalCrossProduct::PhysicalCrossProduct(vector<LogicalType> types, unique_ptr<PhysicalOperator> left,
@@ -129,7 +133,17 @@ unique_ptr<OperatorState> PhysicalCrossProduct::GetOperatorState(ExecutionContex
 OperatorResultType PhysicalCrossProduct::ExecuteInternal(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
                                                          GlobalOperatorState &gstate, OperatorState &state_p) const {
 	auto &state = state_p.Cast<CrossProductOperatorState>();
+#ifdef LINEAGE
+	auto result = state.executor.Execute(input, chunk);
+  if (lineage_manager->capture && active_log) {
+			active_log->cross_log.push_back({state.executor.ScanLHS(), state.executor.PositionInChunk(),
+          state.executor.ScanPosition(), chunk.size(), active_lop->children[0]->out_start});
+      active_log->SetLatestLSN({active_log->filter_log.size(), 0});
+  }
+  return result;
+#else
 	return state.executor.Execute(input, chunk);
+#endif
 }
 
 //===--------------------------------------------------------------------===//

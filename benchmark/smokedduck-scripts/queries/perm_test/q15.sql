@@ -1,6 +1,6 @@
   select 
   0 as out_index,
-    s_rid as supplier, l_rid as lineitem, l_rid2 as lineitem_2
+    s_rid as supplier, l_rid as lineitem, l_rid2 as lineitem_1
   from
   (
   select

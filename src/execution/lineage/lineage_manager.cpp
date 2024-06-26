@@ -47,11 +47,10 @@ shared_ptr<OperatorLineage> LineageManager::CreateOperatorLineage(ClientContext 
 // Iterate through in Postorder to ensure that children have PipelineLineageNodes set before parents
 int LineageManager::PlanAnnotator(PhysicalOperator *op, int counter) {
 	
-	operators_ids[(void*)op] = counter;
 
   if (op->type == PhysicalOperatorType::RESULT_COLLECTOR) {
 		PhysicalOperator* plan = &dynamic_cast<PhysicalResultCollector*>(op)->plan;
-    std::cout << plan->ToString() << std::endl;
+    if (persist) std::cout << plan->ToString() << std::endl;
 		counter = PlanAnnotator(plan, counter);
 	}
 
@@ -64,6 +63,7 @@ int LineageManager::PlanAnnotator(PhysicalOperator *op, int counter) {
 		counter = PlanAnnotator(op->children[i].get(), counter);
 	}
 
+	operators_ids[(void*)op] = counter;
 	return counter + 1;
 }
 

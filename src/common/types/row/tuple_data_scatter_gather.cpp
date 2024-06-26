@@ -522,20 +522,6 @@ void TupleDataCollection::Scatter(TupleDataChunkState &chunk_state, const DataCh
 
 	const auto row_locations = FlatVector::GetData<data_ptr_t>(chunk_state.row_locations);
 
-#ifdef LINEAGE
-    if (active_log && active_log->capture) {
-			unique_ptr<data_ptr_t[]> addresses_copy(new data_ptr_t[append_count]);
-			std::copy(row_locations, row_locations + append_count , addresses_copy.get());
-      if (append_sel.data()) {
-        unique_ptr<sel_t []> sel_copy(new sel_t[append_count]);
-        std::copy(append_sel.data(), append_sel.data() + append_count, sel_copy.get());
-			  active_log->scatter_sel_log.push_back({move(addresses_copy), move(sel_copy), append_count});
-      } else {
-			  active_log->scatter_sel_log.push_back({move(addresses_copy), nullptr, append_count});
-      }
-		}
-#endif
-
 	// Set the validity mask for each row before inserting data
 	const auto validity_bytes = ValidityBytes::SizeInBytes(layout.ColumnCount());
 	for (idx_t i = 0; i < append_count; i++) {
@@ -567,6 +553,20 @@ void TupleDataCollection::Scatter(TupleDataChunkState &chunk_state, const DataCh
 		}
 	}
 #endif
+#ifdef LINEAGE
+    if (active_log && active_log->capture) {
+			unique_ptr<data_ptr_t[]> addresses_copy(new data_ptr_t[append_count]);
+			std::copy(row_locations, row_locations + append_count , addresses_copy.get());
+      if (append_sel.data()) {
+        unique_ptr<sel_t []> sel_copy(new sel_t[append_count]);
+        std::copy(append_sel.data(), append_sel.data() + append_count, sel_copy.get());
+			  active_log->scatter_sel_log.push_back({move(addresses_copy), move(sel_copy), append_count, active_lop->children[1]->out_start});
+      } else {
+			  active_log->scatter_sel_log.push_back({move(addresses_copy), nullptr, append_count, active_lop->children[1]->out_start});
+      }
+		}
+#endif
+
 }
 
 void TupleDataCollection::Scatter(TupleDataChunkState &chunk_state, const Vector &source, const column_t column_id,

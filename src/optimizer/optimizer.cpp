@@ -154,12 +154,14 @@ unique_ptr<LogicalOperator> Optimizer::Optimize(unique_ptr<LogicalOperator> plan
 		cse_optimizer.VisitOperator(*plan);
 	});
 
+#ifdef LINEAGE
+#else
 	// transform ORDER BY + LIMIT to TopN
 	RunOptimizer(OptimizerType::TOP_N, [&]() {
 		TopN topn;
 		plan = topn.Optimize(std::move(plan));
 	});
-
+#endif
 	// creates projection maps so unused columns are projected out early
 	RunOptimizer(OptimizerType::COLUMN_LIFETIME, [&]() {
 		ColumnLifetimeAnalyzer column_lifetime(true);

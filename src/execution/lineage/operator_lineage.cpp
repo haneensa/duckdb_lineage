@@ -41,7 +41,7 @@ void OperatorLineage::PostProcess() {
         idx_t res_count = log[tkey]->row_group_log[k].count;
         idx_t offset = log[tkey]->row_group_log[k].start + log[tkey]->row_group_log[k].vector_index;
         if (log[tkey]->row_group_log[k].sel) {
-          auto payload = log[tkey]->row_group_log[k].sel->owned_data.get();
+          auto payload = log[tkey]->row_group_log[k].sel.get();
           for (idx_t j=0; j < res_count; ++j) {
             payload[j] += offset;
           }
@@ -56,10 +56,10 @@ void OperatorLineage::PostProcess() {
     for (int i=0; i < thread_vec.size(); i++) {
       void* tkey = thread_vec[i];
       if (log.count(tkey) == 0 || log[tkey]->finalize_states_log.empty()) continue;
-      // std::cout << "finalize states: " << tkey << " " << log[tkey]->finalize_states_log.size() << std::endl;
       idx_t count_so_far = 0;
       for (int k=0; k < log[tkey]->finalize_states_log.size(); ++k) {
         idx_t res_count = log[tkey]->finalize_states_log[k].count;
+        // std::cout << count_so_far+res_count << " finalize states: " << tkey << " " << log[tkey]->finalize_states_log.size() << std::endl;
         auto payload = log[tkey]->finalize_states_log[k].addresses.get();
         for (idx_t j=0; j < res_count; ++j) {
           if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
@@ -89,7 +89,7 @@ void OperatorLineage::PostProcess() {
       log[tkey]->combine_log.clear();
     }      
 
-    std::cout << " done " << std::endl;
+    // std::cout << " done " << std::endl;
     break;
   }
 	case PhysicalOperatorType::ORDER_BY: {
@@ -103,6 +103,7 @@ void OperatorLineage::PostProcess() {
         for (idx_t j=0; j < res_count; ++j) {
             log_index->vals.push_back( log[tkey]->reorder_log[k][j] + count_so_far );
         }
+        count_so_far += res_count;
       }
       log[tkey]->reorder_log.clear();
     }
@@ -116,20 +117,21 @@ void OperatorLineage::PostProcess() {
       // std::cout << "Scatter Join: " << log[tkey]->scatter_sel_log.size() << std::endl;
       for (int k = 0; k < log[tkey]->scatter_sel_log.size(); k++) {
         idx_t res_count = log[tkey]->scatter_sel_log[k].count;
+        idx_t in_start = log[tkey]->scatter_sel_log[k].in_start;
         auto payload = log[tkey]->scatter_sel_log[k].addresses.get();
         //std::cout << k << " " << res_count << std::endl;
         if (log[tkey]->scatter_sel_log[k].sel) {
           auto sel = log[tkey]->scatter_sel_log[k].sel.get();
           for (idx_t j=0; j < res_count; ++j) {
             if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
-              log_index->codes[payload[j]] = sel[j] + count_so_far;
-              //st9::cout << "gather: " << k << " " << log_index->codes[payload[j]] << " " << j << " " << (void*)payload[j] << std::endl;
+              log_index->codes[payload[j]] = sel[j] + in_start;
+              //std::cout << "gather: " << k << " " << log_index->codes[payload[j]] << " " << j << " " << (void*)payload[j] << std::endl;
             }
           }
         } else {
           for (idx_t j=0; j < res_count; ++j) {
             if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
-              log_index->codes[payload[j]] = j + count_so_far;
+              log_index->codes[payload[j]] = j + in_start;
               //std::cout << "gather: " << k << " " << log_index->codes[payload[j]] << " " << j << " " << (void*)payload[j] << std::endl;
             }
           }
@@ -149,45 +151,88 @@ void OperatorLineage::PostProcess() {
           idx_t tuples_idx = log[tkey]->perfect_full_scan_ht_log[k].sel_tuples->owned_data.get()[e];
           data_ptr_t* ptr = (data_ptr_t*)log[tkey]->perfect_full_scan_ht_log[k].row_locations->GetData();
          // std::cout << "-> " << build_idx << " " << tuples_idx << " " << key_count << " " << ht_count  << std::endl;
+         // TODO: check if this is correct. follow old implementation
+         log_index->perfect_codes[build_idx] = log_index->codes[ptr[tuples_idx]];
          // std::cout << "-> " << (void*)ptr[ tuples_idx ]  << std::endl;
         }
       }
     }
     for (int i=0; i < thread_vec.size(); i++) {
+      int count_so_far = 0;
       void* tkey = thread_vec[i];
-      idx_t input_offset = 0;
       if (log.count(tkey) == 0 || log[tkey]->perfect_probe_ht_log.empty()) continue;
-      // std::cout << "Perfect Probe Join: " << log[tkey]->perfect_probe_ht_log.size() << std::endl;
-      for (int k = 0; k < log[tkey]->perfect_probe_ht_log.size(); k++) {
-        idx_t count = log[tkey]->perfect_probe_ht_log[k].count;
-       // std::cout << k << " " << count << std::endl;
-        auto left = log[tkey]->perfect_probe_ht_log[k].left.get();
-        auto right = log[tkey]->perfect_probe_ht_log[k].right.get();
+      //std::cout << "Perfect Probe Join: " << log[tkey]->perfect_probe_ht_log.size() << " " << log[tkey]->execute_internal.size() << std::endl;
+      for (int k = 0; k < log[tkey]->execute_internal.size(); k++) {
+        int lsn = log[tkey]->execute_internal[k].first-1;
+        //std::cout << "lsn: " << lsn << " " << k << std::endl;
+        idx_t count = log[tkey]->perfect_probe_ht_log[lsn].count;
+        idx_t in_start = log[tkey]->perfect_probe_ht_log[lsn].in_start;
+       // std::cout << operator_id << " " << k << " " << count << " " << in_start << " " << count_so_far <<  std::endl;
+        auto left = log[tkey]->perfect_probe_ht_log[lsn].left.get();
+        auto right = log[tkey]->perfect_probe_ht_log[lsn].right.get();
         if (left == nullptr) {
           for (idx_t j=0; j < count; ++j) {
-            log_index->vals.push_back( log_index->codes[ log_index->perfect_codes[ right[j] ] ] );
-            log_index->vals_2.push_back( j + input_offset );
+            log_index->vals.push_back( log_index->perfect_codes[ right[j] ]  );
+            log_index->vals_2.push_back( j + in_start );
           }
         } else {
           for (idx_t j=0; j < count; ++j) {
-            log_index->vals.push_back( log_index->codes[ log_index->perfect_codes[ right[j] ] ] );
-            log_index->vals_2.push_back( left[j] + input_offset );
+            log_index->vals.push_back( log_index->perfect_codes[ right[j] ]  );
+            log_index->vals_2.push_back( left[j] + in_start );
           }
         }
+        count_so_far += count;
       }
+      log[tkey]->perfect_probe_ht_log.clear();
+      log[tkey]->execute_internal.clear();
     }
+    int count_so_far = 0;
     for (int i=0; i < thread_vec.size(); i++) {
       void* tkey = thread_vec[i];
       if (log.count(tkey) == 0 || log[tkey]->join_gather_log.empty()) continue;
       // std::cout << "Join: " << log[tkey]->join_gather_log.size() << std::endl;
-      for (int k = 0; k < log[tkey]->join_gather_log.size(); k++) {
-        idx_t res_count = log[tkey]->join_gather_log[k].count;
-        idx_t in_start = log[tkey]->join_gather_log[k].in_start;
-        auto payload = log[tkey]->join_gather_log[k].rhs.get();
-        //std::cout << k << " " << res_count << std::endl;
+      for (int k = 0; k < log[tkey]->execute_internal.size(); k++) {
+        int lsn = log[tkey]->execute_internal[k].first-1;
+        idx_t res_count = log[tkey]->join_gather_log[lsn].count;
+        idx_t in_start = log[tkey]->join_gather_log[lsn].in_start;
+        auto payload = log[tkey]->join_gather_log[lsn].rhs.get();
+        auto lhs = log[tkey]->join_gather_log[lsn].lhs.get();
+        // std::cout << operator_id << " " <<  k << " " << res_count << " " << count_so_far << std::endl;
         for (idx_t j=0; j < res_count; ++j) {
+          if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
+            // std::cout << "probe: " << j<< " " << lhs[j] << " " << res_count <<  " " << (void*)payload[j] << std::endl;
+          }
           log_index->vals.push_back( log_index->codes[ payload[j] ] );
-          log_index->vals_2.push_back( j + in_start );
+          log_index->vals_2.push_back( lhs[j] + in_start );
+        }
+        count_so_far += res_count;
+      }
+      log[tkey]->join_gather_log.clear();
+    }
+    // std::cout << operator_id << " log_index: " << log_index->vals.size() << std::endl;
+    break;
+  }
+	case PhysicalOperatorType::NESTED_LOOP_JOIN: {
+    for (int i=0; i < thread_vec.size(); i++) {
+      void* tkey = thread_vec[i];
+      if (log.count(tkey) == 0 || log[tkey]->nlj_log.empty()) continue;
+      for (int k=0; k < log[tkey]->nlj_log.size(); ++k) {
+        idx_t count = log[tkey]->nlj_log[k].count;
+        idx_t offset = log[tkey]->nlj_log[k].out_start;
+
+        if (log[tkey]->nlj_log[k].left != nullptr) {
+          auto vec_ptr = log[tkey]->nlj_log[k].left->owned_data.get();
+          for (idx_t i=0; i < count; i++) {
+            *(vec_ptr + i) += offset;
+          }
+        }
+        
+        idx_t current_row_index = log[tkey]->nlj_log[k].current_row_index;
+        if (log[tkey]->nlj_log[k].right != nullptr && current_row_index != 0) {
+          auto vec_ptr = log[tkey]->nlj_log[k].right->owned_data.get();
+          for (idx_t i=0; i < count; i++) {
+            *(vec_ptr + i) += current_row_index;
+          }
         }
       }
     }
@@ -195,7 +240,6 @@ void OperatorLineage::PostProcess() {
   }
 	case PhysicalOperatorType::BLOCKWISE_NL_JOIN:
 	case PhysicalOperatorType::CROSS_PRODUCT:
-	case PhysicalOperatorType::NESTED_LOOP_JOIN:
 	case PhysicalOperatorType::PIECEWISE_MERGE_JOIN: {
 		break;
 	}
@@ -235,11 +279,18 @@ vector<ColumnDefinition> OperatorLineage::GetTableColumnTypes() {
     source.emplace_back("getdata_index", LogicalType::INTEGER);
 		break;
 	}
-	case PhysicalOperatorType::HASH_JOIN:
-	case PhysicalOperatorType::BLOCKWISE_NL_JOIN:
 	case PhysicalOperatorType::CROSS_PRODUCT:
+	case PhysicalOperatorType::BLOCKWISE_NL_JOIN:
 	case PhysicalOperatorType::NESTED_LOOP_JOIN:
 	case PhysicalOperatorType::PIECEWISE_MERGE_JOIN: {
+		source.emplace_back("lhs_index", LogicalType::INTEGER);
+		source.emplace_back("rhs_index", LogicalType::INTEGER);
+		source.emplace_back("out_index", LogicalType::BIGINT);
+    source.emplace_back("sink_index", LogicalType::INTEGER);
+    source.emplace_back("getdata_index", LogicalType::INTEGER);
+		break;
+	}
+	case PhysicalOperatorType::HASH_JOIN:{
 		source.emplace_back("lhs_index", LogicalType::BIGINT);
 		source.emplace_back("rhs_index", LogicalType::BIGINT);
 		source.emplace_back("out_index", LogicalType::BIGINT);
@@ -270,7 +321,7 @@ idx_t OperatorLineage::GetLineageAsChunk(DataChunk &insert_chunk,
 	}
 
 	void* thread_val  = thread_vec[thread_id];
-	GetLineageAsChunkLocal(data_idx, local_count, insert_chunk, thread_id, log[thread_val]);
+	GetLineageAsChunkLocal(data_idx, global_count, local_count, insert_chunk, thread_id, log[thread_val]);
 
 	global_count += insert_chunk.size();
 	local_count += insert_chunk.size();
@@ -286,7 +337,7 @@ idx_t OperatorLineage::GetLineageAsChunk(DataChunk &insert_chunk,
 	return insert_chunk.size();
 }
 
-idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count,
+idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count, idx_t local_count,
     DataChunk& chunk, int thread_id, shared_ptr<Log> log) {
 	if (log == nullptr) return 0;
   // std::cout << "get lineage as chunk : " << data_idx << " " << global_count << std::endl;
@@ -296,11 +347,13 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
 	// schema: [INTEGER in_index, INTEGER out_index, INTEGER partition_index]
 	case PhysicalOperatorType::FILTER: {
     if (data_idx >= log->filter_log.size()) return 0;
-    idx_t count = log->filter_log[data_idx].count;
-    idx_t offset = log->filter_log[data_idx].in_start;
+    int lsn = log->execute_internal[data_idx].first-1;
+    // std::cout << "filter: " << data_idx << " " << lsn << std::endl;
+    idx_t count = log->filter_log[lsn].count;
+    idx_t offset = log->filter_log[lsn].in_start;
     data_ptr_t ptr = nullptr;
-    if (log->filter_log[data_idx].sel) {
-      ptr = (data_ptr_t)log->filter_log[data_idx].sel.get();
+    if (log->filter_log[lsn].sel) {
+      ptr = (data_ptr_t)log->filter_log[lsn].sel.get();
     }
 
     chunk.SetCardinality(count);
@@ -320,7 +373,8 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
     idx_t offset = log->row_group_log[data_idx].start + log->row_group_log[data_idx].vector_index;
     data_ptr_t ptr = nullptr;
     if (log->row_group_log[data_idx].sel) {
-      ptr = (data_ptr_t)log->row_group_log[data_idx].sel->owned_data.get();
+     // ptr = (data_ptr_t)log->row_group_log[data_idx].sel->owned_data.get();
+      ptr = (data_ptr_t)log->row_group_log[data_idx].sel.get(); //owned_data.get();
     }
     chunk.SetCardinality(count);
     if (ptr != nullptr) {
@@ -344,6 +398,66 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
     chunk.data[0].Sequence(start+offset, 1, count); // in_index
     chunk.data[1].Sequence(global_count, 1, count); // out_index
     chunk.data[2].Reference(thread_id_vec);
+    break;
+  }
+	case PhysicalOperatorType::NESTED_LOOP_JOIN: {
+    if (data_idx >= log->nlj_log.size()) return 0;
+    int lsn = log->execute_internal[data_idx].first-1;
+    idx_t count = log->nlj_log[lsn].count;
+    chunk.SetCardinality(count);
+    Vector lhs_payload(LogicalType::INTEGER, count);
+    Vector rhs_payload(LogicalType::INTEGER, count);
+    if (log->nlj_log[lsn].left) {
+      data_ptr_t left_ptr = (data_ptr_t)log->nlj_log[lsn].left->owned_data.get();
+      Vector temp(LogicalType::INTEGER, left_ptr);
+      lhs_payload.Reference(temp);
+    } else {
+      lhs_payload.SetVectorType(VectorType::CONSTANT_VECTOR);
+      ConstantVector::SetNull(lhs_payload, true);
+    }
+    
+    if (log->nlj_log[lsn].right) {
+      data_ptr_t right_ptr = (data_ptr_t)log->nlj_log[lsn].right->owned_data.get();
+      Vector temp(LogicalType::INTEGER, right_ptr);
+      rhs_payload.Reference(temp);
+    } else {
+      rhs_payload.SetVectorType(VectorType::CONSTANT_VECTOR);
+      ConstantVector::SetNull(rhs_payload, true);
+    }
+    chunk.data[0].Reference(lhs_payload);
+    chunk.data[1].Reference(rhs_payload);
+    chunk.data[2].Sequence(global_count, 1, count); // out_index
+    chunk.data[3].Reference(thread_id_vec); // sink
+    chunk.data[4].Reference(thread_id_vec); // get data
+    break;
+  }
+  case PhysicalOperatorType::CROSS_PRODUCT: {
+    if (data_idx >= log->cross_log.size()) return 0;
+    int lsn = log->execute_internal[data_idx].first-1;
+
+    idx_t branch_scan_lhs = log->cross_log[lsn].branch_scan_lhs;
+    idx_t count = log->cross_log[lsn].count;
+    idx_t offset = log->cross_log[lsn].in_start;
+    idx_t position_in_chunk = log->cross_log[lsn].position_in_chunk;
+    idx_t scan_position = log->cross_log[lsn].scan_position;
+    chunk.SetCardinality(count);
+    
+    if (branch_scan_lhs == false) {
+      Vector rhs_payload(Value::Value::INTEGER(scan_position + position_in_chunk));
+      Vector lhs_payload(LogicalType::INTEGER, count);
+      lhs_payload.Sequence(offset, 1, count);
+      chunk.data[0].Reference(lhs_payload);
+      chunk.data[1].Reference(rhs_payload);
+    } else {
+      Vector rhs_payload(LogicalType::INTEGER, count);
+      Vector lhs_payload(Value::Value::INTEGER(position_in_chunk + offset));
+      rhs_payload.Sequence(scan_position, 1, count);
+      chunk.data[0].Reference(lhs_payload);
+      chunk.data[1].Reference(rhs_payload);
+    }
+    chunk.data[2].Sequence(global_count, 1, count); // out_index
+    chunk.data[3].Reference(thread_id_vec); // sink
+    chunk.data[4].Reference(thread_id_vec); // get data
     break;
   }
 	case PhysicalOperatorType::HASH_GROUP_BY:
@@ -385,10 +499,10 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
       count = STANDARD_VECTOR_SIZE;
     }
     chunk.SetCardinality(count);
-    data_ptr_t lhs_ptr = (data_ptr_t)(log_index->vals.data() + log_index->offset);
+    data_ptr_t lhs_ptr = (data_ptr_t)(log_index->vals_2.data() + log_index->offset);
     Vector lhs_index(LogicalType::BIGINT, lhs_ptr);
 
-    data_ptr_t rhs_ptr = (data_ptr_t)(log_index->vals_2.data() + log_index->offset);
+    data_ptr_t rhs_ptr = (data_ptr_t)(log_index->vals.data() + log_index->offset);
     Vector rhs_index(LogicalType::BIGINT, rhs_ptr);
     chunk.data[0].Reference(lhs_index); // lhs_index
     chunk.data[1].Reference(rhs_index); // rhs_index

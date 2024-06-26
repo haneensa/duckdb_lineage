@@ -52,6 +52,7 @@ OperatorResultType PhysicalFilter::ExecuteInternal(ExecutionContext &context, Da
 #ifdef LINEAGE
     if (lineage_manager->capture && active_log) {
 			active_log->filter_log.push_back({nullptr, result_count, active_lop->children[0]->out_start});
+      active_log->SetLatestLSN({active_log->filter_log.size(), 0});
 		}
 #endif
 		// nothing was filtered: skip adding any selection vectors
@@ -62,6 +63,7 @@ OperatorResultType PhysicalFilter::ExecuteInternal(ExecutionContext &context, Da
 			unique_ptr<sel_t[]> sel_copy(new sel_t[result_count]);
 			std::copy(state.sel.data(), state.sel.data() + result_count, sel_copy.get());
 			active_log->filter_log.push_back({move(sel_copy), result_count, active_lop->children[0]->out_start});
+      active_log->SetLatestLSN({active_log->filter_log.size(), 0});
 		}
 #endif
 		chunk.Slice(input, state.sel, result_count);

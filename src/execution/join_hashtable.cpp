@@ -541,17 +541,23 @@ void ScanStructure::NextInnerJoin(DataChunk &keys, DataChunk &left, DataChunk &r
 				D_ASSERT(vector.GetType() == ht.layout.GetTypes()[output_col_idx]);
 				GatherResult(vector, result_vector, result_count, output_col_idx);
 			}
-#ifdef LINEAGE
-			if (lineage_manager->capture && active_log) {
-				auto ptrs = FlatVector::GetData<data_ptr_t>(pointers);
-				unique_ptr<data_ptr_t[]> rhs_ptrs(new data_ptr_t[count]);
-				std::copy(ptrs, ptrs + count , rhs_ptrs.get());
-				unique_ptr<sel_t[]> sel_copy(new sel_t[count]);
-				std::copy(result_vector.data(), result_vector.data() + count, sel_copy.get());
-				active_log->join_gather_log.push_back({move(rhs_ptrs), move(sel_copy), count, active_lop->children[0]->out_start});
-			}
-#endif
 		}
+#ifdef LINEAGE
+    if (lineage_manager->capture && active_log && result_count > 0) {
+      auto ptrs = FlatVector::GetData<data_ptr_t>(pointers);
+      unique_ptr<data_ptr_t[]> rhs_ptrs(new data_ptr_t[result_count]);
+      //std::copy(ptrs, ptrs + count , rhs_ptrs.get());
+      for (idx_t i = 0; i < result_count; i++) {
+        auto idx = result_vector.get_index(i);
+        rhs_ptrs[i] = ptrs[idx];
+      }
+      unique_ptr<sel_t[]> sel_copy(new sel_t[result_count]);
+      std::copy(result_vector.data(), result_vector.data() + result_count, sel_copy.get());
+      // std::cout << active_lop->operator_id << " not perfect " << count << " " << active_lop->out_start << std::endl;
+      active_log->join_gather_log.push_back({move(rhs_ptrs), move(sel_copy), result_count, active_lop->children[0]->out_start});
+      active_log->SetLatestLSN({active_log->join_gather_log.size(), 1});
+    }
+#endif
 		AdvancePointers();
 	}
 }
@@ -597,12 +603,8 @@ void ScanStructure::NextSemiOrAntiJoin(DataChunk &keys, DataChunk &left, DataChu
 		result.Slice(left, sel, result_count);
 #ifdef LINEAGE
 		if (lineage_manager->capture && active_log) {
-			//auto ptrs = FlatVector::GetData<data_ptr_t>(pointers);
-			//unique_ptr<data_ptr_t[]> rhs_ptrs(new data_ptr_t[result_count]);
-			//std::copy(ptrs, ptrs + result_count , rhs_ptrs.get());
 			unique_ptr<sel_t[]> sel_copy(new sel_t[result_count]);
 			std::copy(sel.data(), sel.data() + result_count, sel_copy.get());
-			//active_log->join_gather_log.push_back({move(rhs_ptrs), move(sel_copy), result_count, active_lop->children[0]->out_start});
 			active_log->join_gather_log.push_back({nullptr, move(sel_copy), result_count, active_lop->children[0]->out_start});
 		}
 #endif

@@ -3,12 +3,12 @@ import pandas as pd
 
 # Creating connection
 with smokedduck.connect(':default:') as con:
-    con.execute('CALL dbgen(sf=0.1);')
+    con.execute('CALL dbgen(sf=1);')
 
     skip_list = []
     # 2, 4
     # 13, 16, 17, 20
-    for i in [13]: #range(1, 23): # [1, 3, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 18, 19]:
+    for i in [1, 3, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 18, 19]:
         if i in skip_list:
             print(f"############# {i} SKIP ###########")
             continue

@@ -256,6 +256,7 @@ idx_t GroupedAggregateHashTable::AddChunk(DataChunk &groups, Vector &group_hashe
 		unique_ptr<data_ptr_t[]> addresses_copy(new data_ptr_t[groups.size()]);
 		std::copy(ptrs, ptrs + groups.size() , addresses_copy.get());
 		active_log->scatter_log.push_back({move(addresses_copy), groups.size()});
+    // TODO: capture child.out_start
 	}
 #endif
 	VectorOperations::AddInPlace(state.addresses, NumericCast<int64_t>(layout.GetAggrOffset()), payload.size());

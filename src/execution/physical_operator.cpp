@@ -262,6 +262,12 @@ OperatorResultType CachingPhysicalOperator::Execute(ExecutionContext &context, D
 		state.can_cache_chunk = caching_supported && PhysicalOperator::OperatorCachingAllowed(context);
 	}
 	if (!state.can_cache_chunk) {
+#ifdef LINEAGE
+    // ---> active_log->SetLatestLSN(); // {lsn:int, fname:int}
+    if (lineage_manager->capture && active_log && chunk.size() > 0) {
+      active_log->execute_internal.push_back(active_log->LatestLSN());
+    }
+#endif
 		return child_result;
 	}
 	// TODO chunk size of 0 should not result in a cache being created!
@@ -276,17 +282,38 @@ OperatorResultType CachingPhysicalOperator::Execute(ExecutionContext &context, D
 
 		state.cached_chunk->Append(chunk);
 
+#ifdef LINEAGE
+    if (lineage_manager->capture && active_log && chunk.size() > 0) {
+      active_log->cached.push_back(active_log->LatestLSN());
+    }
+#endif
 		if (state.cached_chunk->size() >= (STANDARD_VECTOR_SIZE - CACHE_THRESHOLD) ||
 		    child_result == OperatorResultType::FINISHED) {
 			// chunk cache full: return it
 			chunk.Move(*state.cached_chunk);
 			state.cached_chunk->Initialize(Allocator::Get(context.client), chunk.GetTypes());
+#ifdef LINEAGE
+      if (lineage_manager->capture && active_log) {
+        active_log->execute_internal.insert(active_log->execute_internal.end(),
+          std::make_move_iterator(active_log->cached.begin()),
+          std::make_move_iterator(active_log->cached.end()));
+          active_log->cached.clear();
+      }
+#endif
 			return child_result;
 		} else {
 			// chunk cache not full return empty result
 			chunk.Reset();
 		}
+#ifdef LINEAGE
+	} else {
+    if (lineage_manager->capture && active_log && chunk.size() > 0) {
+      active_log->execute_internal.push_back(active_log->LatestLSN());
+    }
+  }
+#else
 	}
+#endif
 #endif
 
 	return child_result;
@@ -299,6 +326,14 @@ OperatorFinalizeResultType CachingPhysicalOperator::FinalExecute(ExecutionContex
 	if (state.cached_chunk) {
 		chunk.Move(*state.cached_chunk);
 		state.cached_chunk.reset();
+#ifdef LINEAGE
+    if (lineage_manager->capture && active_log) {
+      active_log->execute_internal.insert(active_log->execute_internal.end(),
+        std::make_move_iterator(active_log->cached.begin()),
+        std::make_move_iterator(active_log->cached.end()));
+        active_log->cached.clear();
+    }
+#endif
 	} else {
 		chunk.SetCardinality(0);
 	}
