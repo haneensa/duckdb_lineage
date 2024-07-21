@@ -1,0 +1,39 @@
+# name: test/sql/lineage/l_scan/test_scan.test
+# description: Test Scan with a filter and an actual Filter Lineage
+# group: [l_scan]
+
+
+statement ok
+PRAGMA explain_output = PHYSICAL_ONLY;
+PRAGMA threads=1;
+
+statement ok
+CREATE TABLE t1(i INTEGER);
+
+statement ok
+INSERT INTO t1 SELECT i FROM range(0,200000) tbl(i);
+INSERT INTO t1 SELECT i FROM range(0,5) tabl(i);
+
+statement ok
+PRAGMA enable_lineage;
+PRAGMA persist_lineage;
+
+# filter from different chunks
+query II
+select rowid, * from t1 where i < 2
+----
+0	0
+1	1
+200000	0
+200001	1
+
+statement ok
+PRAGMA disable_lineage;
+
+query III
+SELECT rowid, in_index, out_index FROM LINEAGE_2_SEQ_SCAN_0
+----
+0	0	0
+1	1	1
+2	200000	2
+3	200001	3
