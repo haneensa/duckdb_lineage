@@ -55,6 +55,9 @@ public:
 		active_log = active_lop->log[thread_id].get();
 	}
 
+  void PostProcess(shared_ptr<OperatorLineage> lop);
+
+  std::vector<int64_t> GetStats(shared_ptr<OperatorLineage> lop);
 
 	void Clear() {
 		Reset();

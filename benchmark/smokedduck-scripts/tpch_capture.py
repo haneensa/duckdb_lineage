@@ -91,6 +91,14 @@ for th_id in threads_list:
             output_size = df.loc[0,'c']
             con.execute("DROP TABLE "+table_name)
         print("**** output size: ", output_size)
+        stats = ""
+
+        if args.lineage and args.stats:
+            lineage_size, lineage_count, nchunks, postprocess_time, plan = getStats(con, query)
+            print(plan)
+            size_avg += lineage_size
+            stats = "{},{},{},{}".format(lineage_size, lineage_count, nchunks, postprocess_time*1000)
+        
         if args.show_tables:
             tables = con.execute("PRAGMA show_tables").fetchdf()
             print(tables)
@@ -99,13 +107,6 @@ for th_id in threads_list:
                     if "LINEAGE" in t:
                         print(t)
                         print(con.execute(f"select * from {t}").df())
-        stats = ""
-
-        if args.lineage and args.stats:
-            lineage_size, lineage_count, nchunks, postprocess_time, plan = getStats(con, query)
-            print(plan)
-            size_avg += lineage_size
-            stats = "{},{},{},{}".format(lineage_size, lineage_count, nchunks, postprocess_time*1000)
         if args.lineage:
             DropLineageTables(con)
         results.append([i, avg, sf, args.repeat, lineage_type, th_id, output_size, stats, args.notes,plan_timings])

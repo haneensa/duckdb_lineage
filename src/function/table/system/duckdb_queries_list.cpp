@@ -25,14 +25,14 @@ static unique_ptr<FunctionData> DuckDBQueriesListBind(ClientContext &context, Ta
 	names.emplace_back("query");
 	return_types.emplace_back(LogicalType::VARCHAR);
 
-	names.emplace_back("size_bytes_max");
-	return_types.emplace_back(LogicalType::INTEGER);
+	names.emplace_back("size_mb");
+	return_types.emplace_back(LogicalType::BIGINT);
 
-	names.emplace_back("size_bytes_min");
-	return_types.emplace_back(LogicalType::INTEGER);
+	names.emplace_back("tuples_count");
+	return_types.emplace_back(LogicalType::BIGINT);
 
 	names.emplace_back("nchunks");
-	return_types.emplace_back(LogicalType::INTEGER);
+	return_types.emplace_back(LogicalType::BIGINT);
 
 	names.emplace_back("postprocess_time");
 	return_types.emplace_back(LogicalType::FLOAT);
@@ -112,8 +112,9 @@ void DuckDBQueriesListFunction(ClientContext &context, TableFunctionInput &data_
 	// start returning values
 	// either fill up the chunk or return all the remaining columns
 	idx_t count = 0;
-  std::vector<idx_t> stats(3, 0);
 	while (data.offset < query_to_id.size() && count < STANDARD_VECTOR_SIZE) {
+    shared_ptr<OperatorLineage> lop = lineage_manager->queryid_to_plan[data.offset];
+    std::vector<int64_t> stats = lineage_manager->GetStats(lop);
 		string query = query_to_id[data.offset];
 		idx_t col = 0;
 		// query_id, INT
@@ -121,21 +122,24 @@ void DuckDBQueriesListFunction(ClientContext &context, TableFunctionInput &data_
 		// query, VARCHAR
 		output.SetValue(col++, count, query);
 
-    // size_byes_max
-		output.SetValue(col++, count,Value::INTEGER(stats[0]));
+    // size_mb
+		output.SetValue(col++, count,Value::BIGINT(stats[0]));
 
-    // size_bytes_min
-		output.SetValue(col++, count,Value::INTEGER(stats[2]));
+    // count_mb
+		output.SetValue(col++, count,Value::BIGINT(stats[1]));
 
     // nchunks
-		output.SetValue(col++, count,Value::INTEGER(stats[1]));
+		output.SetValue(col++, count,Value::BIGINT(stats[2]));
 
     // postprocess_time
-    float postprocess_time = 0.0;//((float) end - start) / CLOCKS_PER_SEC;
+		clock_t start = clock();
+		lineage_manager->PostProcess(lop);
+		clock_t end = clock();
+    float postprocess_time = ((float) end - start) / CLOCKS_PER_SEC;
 		output.SetValue(col++, count,Value::FLOAT(postprocess_time));
 
     // plan, VARCHAR
-		output.SetValue(col++, count, PlanToString(lineage_manager->queryid_to_plan[data.offset]));
+		output.SetValue(col++, count, PlanToString(lop));
 
 		count++;
 		data.offset++;

@@ -7,13 +7,6 @@ import os.path
 import json
 from pygg import *
 
-def getstats(row, i):
-    return 0
-    if row["lineage_type"] == "SD_stats":
-        return row['stats'].split(",")[i]
-    else:
-        return 0
-
 def relative_overhead(base, extra): # in %
     return max(((float(extra)-float(base))/float(base))*100, 0)
 
@@ -83,9 +76,8 @@ def getStats(con, q):
     n = len(query_info)-1
     print("Query info: ", query_info.loc[n])
     query_id = query_info.loc[n, 'query_id']
-    lineage_size = query_info.loc[n, 'size_bytes_max']
-    lineage_size = lineage_size/(1024*1024)
-    lineage_count = query_info.loc[n, 'size_bytes_min']
+    lineage_size = query_info.loc[n, 'size_mb']
+    lineage_count = query_info.loc[n, 'tuples_count']
     nchunks = query_info.loc[n, 'nchunks']
     postprocess_time = query_info.loc[n, 'postprocess_time']
     plan = query_info.loc[n, 'plan']

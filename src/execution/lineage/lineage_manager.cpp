@@ -124,5 +124,30 @@ void LineageManager::StoreQueryLineage(ClientContext &context, PhysicalOperator 
   if (persist) CreateLineageTables(context, op, query_id);
 }
 
+void LineageManager::PostProcess(shared_ptr<OperatorLineage> lop) {
+  if (lop == nullptr) return;
+  lop->PostProcess();
+	for (idx_t i = 0; i < lop->children.size(); i++) {
+	  PostProcess(lop->children[i]);
+	}
+}
+
+std::vector<int64_t> LineageManager::GetStats(shared_ptr<OperatorLineage> lop) {
+  if (lop == nullptr) return {0, 0, 0};
+  std::vector<int64_t> stats = lop->GatherStats();
+  idx_t lineage_size_mb = stats[0];
+  idx_t count = stats[1];
+  idx_t nchunks = stats[2];
+	
+  for (idx_t i = 0; i < lop->children.size(); i++) {
+    std::vector<int64_t> sub_stats = GetStats(lop->children[i]);
+    lineage_size_mb += sub_stats[0];
+    count += sub_stats[1];
+    nchunks += sub_stats[2];
+	}
+
+  return {lineage_size_mb, count, nchunks};
+}
+
 } // namespace duckdb
 #endif

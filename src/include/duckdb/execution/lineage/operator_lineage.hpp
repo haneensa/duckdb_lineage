@@ -43,6 +43,8 @@ public:
 	idx_t GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count, idx_t local_count, DataChunk& chunk, int thread_id, shared_ptr<Log> log);
 
 	void PostProcess();
+  std::vector<int64_t> GatherStats();
+  
 
 public:
   int operator_id;

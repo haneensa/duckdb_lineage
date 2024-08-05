@@ -273,5 +273,7 @@ class OperatorFactory():
             return NestedLoopJoin(query_id, op_id, parent_join_cond, node, parent_join_type)
         elif op == 'UNGROUPED_AGGREGATE':
             return UngroupedAggregate(query_id, op_id, parent_join_cond, node, parent_join_type)
+        elif op == "RIGHT_DELIM_JOIN":
+            return RightDelimJoin(query_id, op_id, parent_join_cond, node, parent_join_type)
         else:
             raise Exception('Found unhandled operator', op)
