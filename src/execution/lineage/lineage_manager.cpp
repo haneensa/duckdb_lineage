@@ -135,9 +135,9 @@ void LineageManager::PostProcess(shared_ptr<OperatorLineage> lop) {
 std::vector<int64_t> LineageManager::GetStats(shared_ptr<OperatorLineage> lop) {
   if (lop == nullptr) return {0, 0, 0};
   std::vector<int64_t> stats = lop->GatherStats();
-  idx_t lineage_size_mb = stats[0];
-  idx_t count = stats[1];
-  idx_t nchunks = stats[2];
+  int64_t lineage_size_mb = stats[0];
+  int64_t count = stats[1];
+  int64_t nchunks = stats[2];
 	
   for (idx_t i = 0; i < lop->children.size(); i++) {
     std::vector<int64_t> sub_stats = GetStats(lop->children[i]);

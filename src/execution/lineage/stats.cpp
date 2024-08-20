@@ -24,18 +24,24 @@ std::vector<int64_t> OperatorLineage::GatherStats() {
     if ( log.count(tkey)  == 0) continue;
 
     // filter log
+    // src/execution/operator/filter/physical_filter.cpp
     chunk_count += log[tkey]->filter_log.size();
+    local_lineage_size_mb += chunk_count * sizeof(filter_artifact);
     for (int k=0; k < log[tkey]->filter_log.size(); ++k) {
       idx_t res_count = log[tkey]->filter_log[k].count;
-      local_lineage_size_mb += sizeof(filter_artifact) + res_count * sizeof(sel_t);
+      if (log[tkey]->filter_log[k].sel)
+        local_lineage_size_mb +=  res_count * sizeof(sel_t);
       local_tuples_count += res_count;
     }
 
     // filter scan
+    // src/storage/table/row_group.cpp
     chunk_count += log[tkey]->row_group_log.size();
+    local_lineage_size_mb += chunk_count * sizeof(scan_artifact);
     for (int k=0; k < log[tkey]->row_group_log.size(); ++k) {
       idx_t res_count = log[tkey]->row_group_log[k].count;
-      local_lineage_size_mb += sizeof(scan_artifact) + res_count * sizeof(sel_t);
+      if (log[tkey]->row_group_log[k].sel)
+        local_lineage_size_mb += res_count * sizeof(sel_t);
       local_tuples_count += res_count;
     }
     

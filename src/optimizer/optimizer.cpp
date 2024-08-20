@@ -25,6 +25,10 @@
 #include "duckdb/planner/binder.hpp"
 #include "duckdb/planner/planner.hpp"
 
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+#endif
+
 namespace duckdb {
 
 Optimizer::Optimizer(Binder &binder, ClientContext &context) : context(context), binder(binder), rewriter(context) {
@@ -102,10 +106,12 @@ unique_ptr<LogicalOperator> Optimizer::Optimize(unique_ptr<LogicalOperator> plan
 	});
 
 	// perform filter pushdown
-	RunOptimizer(OptimizerType::FILTER_PUSHDOWN, [&]() {
-		FilterPushdown filter_pushdown(*this);
-		plan = filter_pushdown.Rewrite(std::move(plan));
-	});
+  if (lineage_manager && lineage_manager->enable_filter_pushdown) {
+    RunOptimizer(OptimizerType::FILTER_PUSHDOWN, [&]() {
+      FilterPushdown filter_pushdown(*this);
+      plan = filter_pushdown.Rewrite(std::move(plan));
+    });
+  }
 
 	RunOptimizer(OptimizerType::REGEX_RANGE, [&]() {
 		RegexRangeFilter regex_opt;

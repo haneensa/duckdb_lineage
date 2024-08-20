@@ -118,8 +118,11 @@ if args.save_csv:
     control = 'w'
     if args.csv_append:
         control = 'a'
+    add_header = not os.path.exists(filename)
+    if not add_header and control == 'w':
+        add_header = True
     with open(filename, control) as csvfile:
         csvwriter = csv.writer(csvfile)
-        if not args.csv_append:
+        if add_header:
             csvwriter.writerow(header)
         csvwriter.writerows(results)

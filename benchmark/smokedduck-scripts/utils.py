@@ -48,10 +48,29 @@ def getMat(plan, op):
     return plan[op]
 
 
+def get_op_timings(qid, op_name):
+    plan_fname = '{}_plan.json'.format(qid)
+    with open(plan_fname, 'r') as f:
+        plan = json.load(f)
+        print(plan)
+        op_timings = get_op_timings_local(plan, op_name)
+        print('X', op_timings)
+    os.remove(plan_fname)
+    return op_timings
+
+def get_op_timings_local(plan, op_name_match):
+    op_timings = None
+    for c in  plan['children']:
+        op_name = c['name'].strip()
+        timing = c['timing']
+        if op_name == op_name_match:
+            return timing
+        op_timings = get_op_timings_local(c, op_name_match)
+    return op_timings
 
 def gettimings(plan, res={}):
     for c in  plan['children']:
-        op_name = c['name']
+        op_name = c['name'].strip()
         timing = c['timing']
         res[op_name + str(len(res))] = timing
         gettimings(c, res)
@@ -69,8 +88,8 @@ def parse_plan_timings(qid):
     return plan_timings
 
 def getStats(con, q):
-    print(q)
     q_list = "select * from duckdb_queries_list() where query = ? order by query_id desc limit 1"
+    print(q_list, q)
     query_info = con.execute(q_list, [q]).fetchdf()
     print(query_info)
     n = len(query_info)-1
@@ -208,17 +227,17 @@ def MicroDataZipfan(folder, groups, cardinality, max_val, a_list):
                     df = pd.DataFrame({'idx':idx, 'z': zipfan, 'v': vals})
                     df.to_csv(filename, index=False)
 
-def MicroDataSelective(folder, selectivity, cardinality):
+def MicroDataSelective(con, selectivity, cardinality, max_val=100):
     ## filter data
     for sel in selectivity:
         for card in cardinality:
-            filename = folder+"filter_sel"+str(sel)+"_card"+str(card)+".csv"
-            if not os.path.exists(filename):
-                data = SelectivityGenerator(sel, card)
-                vals = np.random.uniform(0, max_val, card)
-                idx = list(range(0, card))
-                df = pd.DataFrame({'idx':idx, 'z': data, 'v': vals})
-                df.to_csv(filename, index=False)
+            z_col = SelectivityGenerator(sel, card)
+            vals = np.random.uniform(0, max_val, card)
+            idx = list(range(0, card))
+            df = pd.DataFrame({'idx': idx, 'z': z_col, 'v': vals})
+            sel_str = f"{sel}".replace(".", "_")
+            con.execute(f"""create table micro_table_{sel_str}_{card} as select * from df""")
+            #print(con.execute(f"select * from micro_table_{sel_str}_{card} where z=0").df())
 
 def MicroDataMcopies(folder, copies, cardinality, max_val):
     for m in copies:

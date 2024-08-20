@@ -28,7 +28,7 @@ extern thread_local shared_ptr<OperatorLineage> active_lop;
 */
 class LineageManager {
 public:
-	explicit LineageManager() : capture(false), persist(false) {}
+	explicit LineageManager() : capture(false), persist(false), enable_filter_pushdown(true) {}
 	void InitOperatorPlan(ClientContext &context, PhysicalOperator *op);
 	shared_ptr<OperatorLineage> CreateOperatorLineage(ClientContext &context, PhysicalOperator *op);
 	int PlanAnnotator(PhysicalOperator *op, int counter);
@@ -78,6 +78,9 @@ public:
   std::vector<string> query_to_id;
   std::unordered_map<idx_t, shared_ptr<OperatorLineage>> queryid_to_plan;
   std::mutex glock;
+
+  // micro benchmark flags
+  bool enable_filter_pushdown;
 };
 
 } // namespace duckdb
