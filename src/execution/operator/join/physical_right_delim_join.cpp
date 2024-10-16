@@ -20,6 +20,10 @@ PhysicalRightDelimJoin::PhysicalRightDelimJoin(vector<LogicalType> types, unique
     : PhysicalDelimJoin(PhysicalOperatorType::RIGHT_DELIM_JOIN, std::move(types), std::move(original_join),
                         std::move(delim_scans), estimated_cardinality) {
 	D_ASSERT(join->children.size() == 2);
+  //std::cout << "======== original join ========== " << children.size() << std::endl;
+  //std::cout << join->ToString() << std::endl;
+  //std::cout << "===================" << std::endl;
+
 	// now for the original join
 	// we take its right child, this is the side that we will duplicate eliminate
 	children.push_back(std::move(join->children[1]));
@@ -62,11 +66,14 @@ SinkResultType PhysicalRightDelimJoin::Sink(ExecutionContext &context, DataChunk
 
 	OperatorSinkInput join_sink_input {*join->sink_state, *lstate.join_state, input.interrupt_state};
 #ifdef LINEAGE
-	lineage_manager->Set(this->lop, (void*)&context.thread);
+	lineage_manager->SetP(this->join->lop.get(), (void*)&context.thread);
 #endif
 	join->Sink(context, chunk, join_sink_input);
 
 	OperatorSinkInput distinct_sink_input {*distinct->sink_state, *lstate.distinct_state, input.interrupt_state};
+#ifdef LINEAGE
+	lineage_manager->SetP(this->distinct->lop.get(), (void*)&context.thread);
+#endif
 	
   distinct->Sink(context, chunk, distinct_sink_input);
 
@@ -82,11 +89,14 @@ SinkCombineResultType PhysicalRightDelimJoin::Combine(ExecutionContext &context,
 	auto &lstate = input.local_state.Cast<RightDelimJoinLocalState>();
 
 #ifdef LINEAGE
-	lineage_manager->Set(this->lop, (void*)&context.thread);
+	lineage_manager->SetP(this->join->lop.get(), (void*)&context.thread);
 #endif
-
 	OperatorSinkCombineInput join_combine_input {*join->sink_state, *lstate.join_state, input.interrupt_state};
 	join->Combine(context, join_combine_input);
+
+#ifdef LINEAGE
+	lineage_manager->SetP(this->distinct->lop.get(), (void*)&context.thread);
+#endif
 
 	OperatorSinkCombineInput distinct_combine_input {*distinct->sink_state, *lstate.distinct_state,
 	                                                 input.interrupt_state};
@@ -95,6 +105,7 @@ SinkCombineResultType PhysicalRightDelimJoin::Combine(ExecutionContext &context,
 #ifdef LINEAGE
 	lineage_manager->Reset();
 #endif
+  
 	return SinkCombineResultType::FINISHED;
 }
 
@@ -104,11 +115,15 @@ SinkFinalizeType PhysicalRightDelimJoin::Finalize(Pipeline &pipeline, Event &eve
 	D_ASSERT(distinct);
 
 #ifdef LINEAGE
-	lineage_manager->Set(this->lop, (void*)&client);
+	lineage_manager->SetP(this->join->lop.get(), (void*)&client);
 #endif
 
 	OperatorSinkFinalizeInput join_finalize_input {*join->sink_state, input.interrupt_state};
 	join->Finalize(pipeline, event, client, join_finalize_input);
+
+#ifdef LINEAGE
+	lineage_manager->SetP(this->distinct->lop.get(), (void*)&client);
+#endif
 
 	OperatorSinkFinalizeInput distinct_finalize_input {*distinct->sink_state, input.interrupt_state};
 	distinct->Finalize(pipeline, event, client, distinct_finalize_input);
@@ -116,6 +131,11 @@ SinkFinalizeType PhysicalRightDelimJoin::Finalize(Pipeline &pipeline, Event &eve
 #ifdef LINEAGE
 	lineage_manager->Reset();
 #endif
+
+  //std::cout << "======== JOIN ===========" << std::endl;
+  //std::cout << join->ToString() << std::endl;
+  //std::cout << "======== DISTINCT ===========" << std::endl;
+  //std::cout << distinct->ToString() << std::endl;
 
 	return SinkFinalizeType::READY;
 }
@@ -136,6 +156,7 @@ void PhysicalRightDelimJoin::BuildPipelines(Pipeline &current, MetaPipeline &met
 	// any scan of the duplicate eliminated data on the LHS depends on this pipeline
 	// we add an entry to the mapping of (PhysicalOperator*) -> (Pipeline*)
 	auto &state = meta_pipeline.GetState();
+  //std::cout << " ====== build pipelines delim === " << delim_scans.size() << std::endl;
 	for (auto &delim_scan : delim_scans) {
 		state.delim_join_dependencies.insert(
 		    make_pair(delim_scan, reference<Pipeline>(*child_meta_pipeline.GetBasePipeline())));

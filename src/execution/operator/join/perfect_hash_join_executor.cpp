@@ -205,7 +205,7 @@ OperatorResultType PerfectHashJoinExecutor::ProbePerfectHashTable(ExecutionConte
 		result_vector.Slice(state.build_sel_vec, probe_sel_count);
 	}
 #ifdef LINEAGE
-  if (lineage_manager->capture && active_log && probe_sel_count) {
+  if (lineage_manager->capture && active_log && pactive_lop && probe_sel_count) {
     unique_ptr<sel_t[]> right = nullptr;
     right = unique_ptr<sel_t[]>(new sel_t[probe_sel_count]);
     std::copy(state.build_sel_vec.data(), state.build_sel_vec.data() + probe_sel_count, right.get());
@@ -216,7 +216,7 @@ OperatorResultType PerfectHashJoinExecutor::ProbePerfectHashTable(ExecutionConte
       std::copy(state.probe_sel_vec.data(), state.probe_sel_vec.data() + probe_sel_count, left.get());
     }
    // std::cout << active_lop->operator_id << " perfect " << probe_sel_count << " " << active_lop->out_start << std::endl;
-    active_log->perfect_probe_ht_log.push_back({move(left), move(right), probe_sel_count, active_lop->children[0]->out_start});
+    active_log->perfect_probe_ht_log.push_back({move(left), move(right), probe_sel_count, pactive_lop->children[0]->out_start});
     active_log->SetLatestLSN({active_log->perfect_probe_ht_log.size(), 2});
 	}
 #endif

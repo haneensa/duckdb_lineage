@@ -555,14 +555,6 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 				state.vector_index++;
 				continue;
 			}
-#ifdef LINEAGE
-			if (lineage_manager->capture && active_log) {
-			  unique_ptr<sel_t[]> sel_copy(new sel_t[approved_tuple_count]);
-			  std::copy(sel.data(), sel.data() + approved_tuple_count, sel_copy.get());
-				active_log->row_group_log.push_back({move(sel_copy), approved_tuple_count, this->start, current_row});
-				//active_log->row_group_log.push_back({sel.sel_data(), approved_tuple_count, this->start, current_row});
-			}
-#endif
 			//! Now we use the selection vector to fetch data for the other columns.
 			for (idx_t i = 0; i < column_ids.size(); i++) {
 				if (!table_filters || table_filters->filters.find(i) == table_filters->filters.end()) {
@@ -593,6 +585,13 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 			}
 			D_ASSERT(approved_tuple_count > 0);
 			count = approved_tuple_count;
+#ifdef LINEAGE
+			if (lineage_manager->capture && active_log) {
+			  sel_t* sel_copy = new sel_t[count];
+			  memcpy(sel_copy, sel.data(),  count * sizeof(sel_t));
+				active_log->row_group_log.push_back({sel_copy, approved_tuple_count, this->start, current_row});
+			}
+#endif
 		}
 		result.SetCardinality(count);
 		state.vector_index++;

@@ -41,7 +41,7 @@ struct limit_artifact {
 };
 
 struct filter_artifact {
-	unique_ptr<sel_t[]> sel;
+	sel_t* sel;
 	idx_t count;
 	idx_t in_start;
 };
@@ -54,8 +54,7 @@ struct perfect_join_artifact {
 };
 
 struct scan_artifact {
-	//buffer_ptr<SelectionData> sel;
-	unique_ptr<sel_t[]> sel;
+	sel_t* sel;
 	idx_t count;
 	idx_t start;
 	idx_t vector_index;
@@ -63,6 +62,16 @@ struct scan_artifact {
 
 struct address_artifact {
 	unique_ptr<data_ptr_t[]> addresses;
+	idx_t count;
+};
+
+struct no_address_artifact {
+	data_ptr_t* addresses;
+	idx_t count;
+};
+
+struct int_address_artifact {
+	int* addresses;
 	idx_t count;
 };
 
@@ -98,18 +107,24 @@ struct perfect_full_scan_ht_artifact {
 //
 struct cross_artifact {
   // returns if the left side is scanned as a constant vector
-  idx_t branch_scan_lhs;
-  idx_t position_in_chunk;
-  idx_t scan_position;
-  idx_t count;
-  idx_t in_start;
+  uint32_t position_in_chunk;
+  uint32_t scan_position;
+  uint32_t count;
+  uint32_t in_start;
+  bool branch_scan_lhs;
+};
+
+struct bnlj_artifact {
+  // returns if the left side is scanned as a constant vector
+  sel_t* sel;
+  uint32_t count;
 };
 
 // NLJ Log
 //
-struct nlj_artifact {
-  buffer_ptr<SelectionData> left;
-  buffer_ptr<SelectionData> right;
+struct nlj_artifact_uniq {
+  unsafe_unique_array<sel_t> left;
+  unsafe_unique_array<sel_t> right;
   idx_t count;
   idx_t current_row_index;
   idx_t out_start;
@@ -126,15 +141,18 @@ public:
 
   std::pair<int, int> LatestLSN();
   void SetLatestLSN(std::pair<int, int>);
-
+  ~Log();
+  
 public:
   bool capture;
 	std::vector<filter_artifact> filter_log;
+	std::vector<int> all_filter_log;
 	std::vector<limit_artifact> limit_offset;
 	vector<perfect_full_scan_ht_artifact> perfect_full_scan_ht_log;
   vector<perfect_join_artifact> perfect_probe_ht_log;
 	vector<scan_artifact> row_group_log;
-	vector<address_artifact> scatter_log;
+	vector<no_address_artifact> scatter_log;
+	vector<int_address_artifact> int_scatter_log;
 	vector<address_sel_artifact> scatter_sel_log;
 	vector<address_artifact> gather_log;
 	vector<combine_artifact> combine_log;
@@ -142,13 +160,16 @@ public:
 	vector<join_gather_artifact> join_gather_log;
   vector<vector<idx_t>> reorder_log;
   vector<cross_artifact> cross_log;
-  vector<nlj_artifact> nlj_log;
+  //vector<std::array<uint32_t, 5>> no_cross_log;
+  vector<nlj_artifact_uniq> nlj_log;
+  vector<bnlj_artifact> bnlj_log;
 
   vector<std::pair<int, int>> execute_internal;
   vector<std::pair<int, int>> cached;
 
   std::pair<int, int> latest;
-
+  int tuple_size = 0;
+  uintptr_t fixed = 0;
 private:
 };
 

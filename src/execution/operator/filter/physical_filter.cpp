@@ -50,20 +50,23 @@ OperatorResultType PhysicalFilter::ExecuteInternal(ExecutionContext &context, Da
 	idx_t result_count = state.executor.SelectExpression(input, state.sel);
 	if (result_count == input.size()) {
 #ifdef LINEAGE
-    if (lineage_manager->capture && active_log) {
-			active_log->filter_log.push_back({nullptr, result_count, active_lop->children[0]->out_start});
-      active_log->SetLatestLSN({active_log->filter_log.size(), 0});
+    if (lineage_manager->capture && active_log && pactive_lop) {
+      // TODO: check if having separate logs is better?
+			active_log->all_filter_log.push_back(pactive_lop->children[0]->out_start);
+      active_log->SetLatestLSN({active_log->all_filter_log.size(), result_count});
 		}
 #endif
 		// nothing was filtered: skip adding any selection vectors
 		chunk.Reference(input);
 	} else {
 #ifdef LINEAGE
-    if (lineage_manager->capture && active_log && result_count) {
-			unique_ptr<sel_t[]> sel_copy(new sel_t[result_count]);
-			std::copy(state.sel.data(), state.sel.data() + result_count, sel_copy.get());
-			active_log->filter_log.push_back({move(sel_copy), result_count, active_lop->children[0]->out_start});
+    if (lineage_manager->capture && active_log && pactive_lop && result_count) {
+			active_log->filter_log.emplace_back();
+			active_log->filter_log.back().sel = (sel_t*) malloc(result_count * sizeof(sel_t));
+			active_log->filter_log.back().count = result_count;
+			active_log->filter_log.back().in_start = pactive_lop->children[0]->out_start;
       active_log->SetLatestLSN({active_log->filter_log.size(), 0});
+			memcpy(active_log->filter_log.back().sel, state.sel.data(),  result_count * sizeof(sel_t));
 		}
 #endif
 		chunk.Slice(input, state.sel, result_count);

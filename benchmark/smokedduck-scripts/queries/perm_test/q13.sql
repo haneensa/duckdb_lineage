@@ -1,3 +1,4 @@
+
   select groups2.out_index-1 as out_index,  customer, orders
   from (
     SELECT customer.rowid as customer, orders.rowid as orders,
@@ -11,8 +12,9 @@
     )
     GROUP BY c_custkey
   ) as groups1 using (c_custkey) join (
+    SELECT  ROW_NUMBER() OVER (ORDER BY (SELECT custdist) desc, (SELECT c_count) desc) AS out_index, custdist, c_count
+    FROM (
     SELECT 
-        ROW_NUMBER() OVER (ORDER BY (SELECT 1)) AS out_index,
     c_count, count(*) AS custdist
     FROM (
         SELECT c_custkey, count(o_orderkey) as c_count
@@ -22,5 +24,5 @@
         )
         GROUP BY c_custkey
     )
-    GROUP BY c_count
+    GROUP BY c_count order by custdist desc, c_count desc) as tinner
   ) as groups2 using (c_count)

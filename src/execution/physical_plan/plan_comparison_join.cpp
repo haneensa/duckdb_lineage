@@ -16,6 +16,10 @@
 #include "duckdb/planner/expression_iterator.hpp"
 #include "duckdb/catalog/catalog_entry/duck_table_entry.hpp"
 
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+#endif
+
 namespace duckdb {
 
 bool ExtractNumericValue(Value val, int64_t &result) {
@@ -167,6 +171,34 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::PlanComparisonJoin(LogicalCo
 		// no conditions: insert a cross product
 		return make_uniq<PhysicalCrossProduct>(op.types, std::move(left), std::move(right), op.estimated_cardinality);
 	}
+
+#ifdef LINEAGE
+  if (lineage_manager && lineage_manager->explicit_join_type != nullptr) {
+    if (*lineage_manager->explicit_join_type.get() == "hash") {
+      // Equality join with small number of keys : possible perfect join optimization
+      PerfectHashJoinStats perfect_join_stats;
+      CheckForPerfectJoinOpt(op, perfect_join_stats);
+      return  make_uniq<PhysicalHashJoin>(op, std::move(left), std::move(right), std::move(op.conditions),
+                                         op.join_type, op.left_projection_map, op.right_projection_map,
+                                         std::move(op.mark_types), op.estimated_cardinality, perfect_join_stats);
+    } else if (*lineage_manager->explicit_join_type.get() == "merge") {
+			// range join: use piecewise merge join
+			return make_uniq<PhysicalPiecewiseMergeJoin>(op, std::move(left), std::move(right), std::move(op.conditions),
+			                                          op.join_type, op.estimated_cardinality);
+    } else if (*lineage_manager->explicit_join_type.get() == "nl") {
+			// inequality join: use nested loop
+			return make_uniq<PhysicalNestedLoopJoin>(op, std::move(left), std::move(right), std::move(op.conditions),
+			                                         op.join_type, op.estimated_cardinality);
+    } else if (*lineage_manager->explicit_join_type.get() == "block") {
+			for (auto &cond : op.conditions) {
+				RewriteJoinCondition(*cond.right, left->types.size());
+			}
+			auto condition = JoinCondition::CreateExpression(std::move(op.conditions));
+			return make_uniq<PhysicalBlockwiseNLJoin>(op, std::move(left), std::move(right), std::move(condition),
+			                                          op.join_type, op.estimated_cardinality);
+    }
+  }
+#endif
 
 	idx_t has_range = 0;
 	bool has_equality = HasEquality(op.conditions, has_range);

@@ -8,6 +8,10 @@
 #include "duckdb/execution/operator/join/physical_cross_product.hpp"
 #include "duckdb/common/enum_util.hpp"
 
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+#endif
+
 namespace duckdb {
 
 PhysicalBlockwiseNLJoin::PhysicalBlockwiseNLJoin(LogicalOperator &op, unique_ptr<PhysicalOperator> left,
@@ -147,6 +151,7 @@ OperatorResultType PhysicalBlockwiseNLJoin::ExecuteInternal(ExecutionContext &co
 				// have a match found
 				state.left_outer.ConstructLeftJoinResult(input, *intermediate_chunk);
 				state.left_outer.Reset();
+
 			}
 
 			if (join_type == JoinType::SEMI) {
@@ -164,6 +169,14 @@ OperatorResultType PhysicalBlockwiseNLJoin::ExecuteInternal(ExecutionContext &co
 
 		// handle anti and semi joins with different logic
 		if (result_count > 0) {
+#ifdef LINEAGE
+      if (lineage_manager->capture && active_log) {
+        sel_t* sel_copy = new sel_t[result_count];
+        memcpy(sel_copy, state.match_sel.data(), result_count*sizeof(sel_t));
+        active_log->bnlj_log.push_back({sel_copy, result_count});
+        active_log->SetLatestLSN({active_log->bnlj_log.size(), 0});
+      }
+#endif
 			// found a match!
 			// handle anti semi join conditions first
 			if (join_type == JoinType::ANTI || join_type == JoinType::SEMI) {
@@ -192,6 +205,7 @@ OperatorResultType PhysicalBlockwiseNLJoin::ExecuteInternal(ExecutionContext &co
 					// set the match flags in the RHS
 					gstate.right_outer.SetMatches(state.match_sel, result_count, state.cross_product.ScanPosition());
 				}
+
 				intermediate_chunk->Slice(state.match_sel, result_count);
 			}
 		} else {

@@ -95,7 +95,9 @@ public:
 	//! A map to store the optimal join plan found for a specific JoinRelationSet*
 	optional_ptr<const reference_map_t<JoinRelationSet, unique_ptr<DPJoinNode>>> plans;
 
+#ifdef LINEAGE
 	unique_ptr<LogicalOperator> UndoShortCircuiting(unique_ptr<LogicalOperator> op);
+#endif
 
 private:
 	vector<reference<LogicalOperator>> filter_operators;

@@ -265,7 +265,7 @@ OperatorResultType CachingPhysicalOperator::Execute(ExecutionContext &context, D
 #ifdef LINEAGE
     // ---> active_log->SetLatestLSN(); // {lsn:int, fname:int}
     if (lineage_manager->capture && active_log && chunk.size() > 0) {
-      active_log->execute_internal.push_back(active_log->LatestLSN());
+      active_log->execute_internal.push_back(active_log->latest);
     }
 #endif
 		return child_result;
@@ -284,7 +284,7 @@ OperatorResultType CachingPhysicalOperator::Execute(ExecutionContext &context, D
 
 #ifdef LINEAGE
     if (lineage_manager->capture && active_log && chunk.size() > 0) {
-      active_log->cached.push_back(active_log->LatestLSN());
+       active_log->cached.push_back(active_log->latest);
     }
 #endif
 		if (state.cached_chunk->size() >= (STANDARD_VECTOR_SIZE - CACHE_THRESHOLD) ||
@@ -308,7 +308,7 @@ OperatorResultType CachingPhysicalOperator::Execute(ExecutionContext &context, D
 #ifdef LINEAGE
 	} else {
     if (lineage_manager->capture && active_log && chunk.size() > 0) {
-      active_log->execute_internal.push_back(active_log->LatestLSN());
+      active_log->execute_internal.push_back(active_log->latest);
     }
   }
 #else

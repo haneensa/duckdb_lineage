@@ -20,7 +20,7 @@ class LineageManager;
 // Declaration of the global and thread_local variables
 extern unique_ptr<LineageManager> lineage_manager;
 extern thread_local Log* active_log;
-extern thread_local shared_ptr<OperatorLineage> active_lop;
+extern thread_local OperatorLineage* pactive_lop;
 
 //! LineageManager
 /*!
@@ -36,23 +36,19 @@ public:
 	void StoreQueryLineage(ClientContext &context, PhysicalOperator* op, string query);
 	void Reset() {
 		active_log = nullptr;
+    pactive_lop = nullptr;
 	}
 
-  void InitLog(shared_ptr<OperatorLineage> lop, void* thread_id) {
+  void InitLog(shared_ptr<OperatorLineage> lop, void* thread_id);
+  
+  void SetP(OperatorLineage* lop, void* thread_id) {
 		if (!capture || lop == nullptr) return;
-
+    pactive_lop = lop;
 		std::lock_guard<std::mutex> lock(lop->glock);
-		if (lop->log.count(thread_id) == 0) {
-			lop->log[thread_id] = make_uniq<Log>();
-		}
-  }
+		active_log = pactive_lop->log[thread_id].get();
+    // TODO: access child log to get out_start
+    return;
 
-  void Set(shared_ptr<OperatorLineage> lop, void* thread_id) {
-		if (!capture || lop == nullptr) return;
-
-    active_lop = lop;
-		std::lock_guard<std::mutex> lock(lop->glock);
-		active_log = active_lop->log[thread_id].get();
 	}
 
   void PostProcess(shared_ptr<OperatorLineage> lop);
@@ -65,6 +61,7 @@ public:
 		query_to_id.clear();
 		global_logger.clear();
 		operators_ids.clear();
+    table_lineage_op.clear();
 	}
 
 public:
@@ -81,6 +78,8 @@ public:
 
   // micro benchmark flags
   bool enable_filter_pushdown;
+  unique_ptr<string> explicit_join_type = nullptr;
+  unique_ptr<string> explicit_agg_type = nullptr;
 };
 
 } // namespace duckdb

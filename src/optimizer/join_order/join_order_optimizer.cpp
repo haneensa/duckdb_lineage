@@ -1,13 +1,15 @@
 #include "duckdb/optimizer/join_order/join_order_optimizer.hpp"
-
+#include "duckdb/optimizer/join_order/cost_model.hpp"
+#include "duckdb/optimizer/join_order/plan_enumerator.hpp"
 #include "duckdb/common/enums/join_type.hpp"
 #include "duckdb/common/limits.hpp"
 #include "duckdb/common/pair.hpp"
-#include "duckdb/execution/lineage/lineage_manager.hpp"
-#include "duckdb/optimizer/join_order/cost_model.hpp"
-#include "duckdb/optimizer/join_order/plan_enumerator.hpp"
 #include "duckdb/planner/expression/list.hpp"
 #include "duckdb/planner/operator/list.hpp"
+
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+#endif
 
 namespace duckdb {
 
@@ -60,9 +62,14 @@ unique_ptr<LogicalOperator> JoinOrderOptimizer::Optimize(unique_ptr<LogicalOpera
 		}
 	}
 
+#ifdef LINEAGE
 	if (stats == nullptr && lineage_manager->capture) {
+    //std::cout << "undoShortCircuit" << std::endl;
+    //std::cout << new_logical_plan->ToString() << std::endl;
 		new_logical_plan = query_graph_manager.UndoShortCircuiting(std::move(new_logical_plan));
+    //std::cout << new_logical_plan->ToString() << std::endl;
 	}
+#endif
 
 	// only perform left right optimizations when stats is null (means we have the top level optimize call)
 	// Don't check reorderability because non-reorderable joins will result in 1 relation, but we can

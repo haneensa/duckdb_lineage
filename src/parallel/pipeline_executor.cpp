@@ -356,7 +356,8 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 #endif
 
 #ifdef LINEAGE
-	lineage_manager->Set(pipeline.sink->lop, (void*)&context.thread);
+	//lineage_manager->Set(pipeline.sink->lop, (void*)&context.thread);
+	lineage_manager->SetP(pipeline.sink->lop.get(), (void*)&context.thread);
 	//lineage_manager->Set((void*)(pipeline.sink.get()), (void*)&context.thread);
 #endif
 	auto result = pipeline.sink->Combine(context, combine_input);
@@ -536,17 +537,17 @@ void PipelineExecutor::StartOperator(PhysicalOperator &op) {
 	}
 #ifdef LINEAGE
 	// lineage_manager->Set((void*)&op, (void*)&context.thread);
-	lineage_manager->Set(op.lop, (void*)&context.thread);
+	lineage_manager->SetP(op.lop.get(), (void*)&context.thread);
 #endif
 	context.thread.profiler.StartOperator(&op);
 }
 
 void PipelineExecutor::EndOperator(PhysicalOperator &op, optional_ptr<DataChunk> chunk) {
 #ifdef LINEAGE
-  if (lineage_manager->capture && active_lop && chunk) {
+  if (lineage_manager->capture && pactive_lop && chunk) {
     // TODO: make this local to the thread
-    active_lop->out_start = active_lop->out_end;
-    active_lop->out_end += chunk->size() ;
+    pactive_lop->out_start = pactive_lop->out_end;
+    pactive_lop->out_end += chunk->size() ;
     //std::cout << "EndOperator: " << active_lop->operator_id << " " -> active_lop->out_end << " " << chunk.size() << std::endl;
   }
 	lineage_manager->Reset();

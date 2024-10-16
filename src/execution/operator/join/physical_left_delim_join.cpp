@@ -91,7 +91,7 @@ SinkResultType PhysicalLeftDelimJoin::Sink(ExecutionContext &context, DataChunk 
 	lstate.lhs_data.Append(lstate.append_state, chunk);
 	OperatorSinkInput distinct_sink_input {*distinct->sink_state, *lstate.distinct_state, input.interrupt_state};
 #ifdef LINEAGE
-	lineage_manager->Set(this->lop, (void*)&context.thread);
+	lineage_manager->SetP(this->distinct->lop.get(), (void*)&context.thread);
 #endif
 	distinct->Sink(context, chunk, distinct_sink_input);
 #ifdef LINEAGE
@@ -104,7 +104,7 @@ SinkCombineResultType PhysicalLeftDelimJoin::Combine(ExecutionContext &context, 
 	auto &lstate = input.local_state.Cast<LeftDelimJoinLocalState>();
 	auto &gstate = input.global_state.Cast<LeftDelimJoinGlobalState>();
 #ifdef LINEAGE
-	lineage_manager->Set(this->lop, (void*)&context.thread);
+	lineage_manager->SetP(this->distinct->lop.get(), (void*)&context.thread);
 #endif
 	
 	gstate.Merge(lstate.lhs_data);
@@ -125,8 +125,16 @@ SinkFinalizeType PhysicalLeftDelimJoin::Finalize(Pipeline &pipeline, Event &even
 	// finalize the distinct HT
 	D_ASSERT(distinct);
 
+#ifdef LINEAGE
+	lineage_manager->SetP(this->distinct->lop.get(), (void*)&client);
+#endif
+
 	OperatorSinkFinalizeInput finalize_input {*distinct->sink_state, input.interrupt_state};
 	distinct->Finalize(pipeline, event, client, finalize_input);
+
+#ifdef LINEAGE
+	lineage_manager->Reset();
+#endif
 	return SinkFinalizeType::READY;
 }
 

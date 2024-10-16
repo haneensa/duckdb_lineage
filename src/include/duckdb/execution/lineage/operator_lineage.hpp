@@ -29,8 +29,8 @@ class OperatorLineage;
 */
 class OperatorLineage {
 public:
-	explicit OperatorLineage(int operator_id, PhysicalOperatorType type, string name)
-	    : operator_id(operator_id),  processed(false), type(type), name(name), table_name(""), extra(""),
+	explicit OperatorLineage(void* op, int operator_id, PhysicalOperatorType type, string name)
+	    : op(op), operator_id(operator_id),  processed(false), type(type), name(name), table_name(""), extra(""),
       out_start(0), out_end(0) {
         log_index = make_shared_ptr<LogIndex>();
       }
@@ -47,6 +47,7 @@ public:
   
 
 public:
+  void* op;
   int operator_id;
   bool processed;
   PhysicalOperatorType type;

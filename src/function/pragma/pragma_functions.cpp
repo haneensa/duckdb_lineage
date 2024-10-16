@@ -164,6 +164,29 @@ static void PragmaEnableFilterPushDown(ClientContext &context, const FunctionPar
 	std::cout << "Enable Filter Pushdown" << std::endl;
 }
 
+static void PragmaSetJoin(ClientContext &context, const FunctionParameters &parameters) {
+	string join_type = parameters.values[0].ToString();
+	D_ASSERT(join_type == "hash" || join_type == "merge" || join_type == "nl" || join_type == "index" || join_type == "block" || join_type == "clear");
+	std::cout << "Setting join type to " << join_type << " - be careful! Failures possible for hash/index join if non equijoin." << std::endl;
+  if (!lineage_manager) return;
+	if (join_type == "clear") {
+	  lineage_manager->explicit_join_type = nullptr;
+	} else {
+		lineage_manager->explicit_join_type = make_uniq<string>(join_type);
+	}
+}
+
+static void PragmaSetAgg(ClientContext &context, const FunctionParameters &parameters) {
+	string agg_type = parameters.values[0].ToString();
+	D_ASSERT(agg_type == "perfect" || agg_type == "reg" || agg_type == "clear");
+	std::cout << "Setting agg type to " << agg_type << " - be careful! Failures possible if too many buckets (I think)." << std::endl;
+  if (!lineage_manager) return;
+	if (agg_type == "clear") {
+		lineage_manager->explicit_agg_type = nullptr;
+	} else {
+		lineage_manager->explicit_agg_type = make_uniq<string>(agg_type);
+	}
+}
 #endif
 
 void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
@@ -211,6 +234,8 @@ void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
 	set.AddFunction(PragmaFunction::PragmaStatement("persist_lineage", PragmaPersistLineage));
 	set.AddFunction(PragmaFunction::PragmaStatement("enable_filter_pushdown", PragmaEnableFilterPushDown));
 	set.AddFunction(PragmaFunction::PragmaStatement("disable_filter_pushdown", PragmaDisableFilterPushDown));
+	set.AddFunction(PragmaFunction::PragmaCall("set_join", PragmaSetJoin, {LogicalType::VARCHAR}));
+	set.AddFunction(PragmaFunction::PragmaCall("set_agg", PragmaSetAgg, {LogicalType::VARCHAR}));
 #endif
 }
 

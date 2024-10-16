@@ -129,6 +129,21 @@ void PerfectAggregateHashTable::AddChunk(DataChunk &groups, DataChunk &payload) 
 		current_shift -= required_bits[i];
 		ComputeGroupLocation(groups.data[i], group_minima[i], address_data, current_shift, groups.size());
 	}
+
+#ifdef LINEAGE
+	if (lineage_manager->capture && active_log) {
+    active_log->tuple_size = tuple_size;
+    active_log->fixed = uintptr_t(data);
+		active_log->int_scatter_log.emplace_back();
+    int* a = (int*) malloc(groups.size() * sizeof(int));
+    active_log->int_scatter_log.back().addresses = a;
+    active_log->int_scatter_log.back().count = groups.size();
+    for (idx_t i = 0; i < groups.size(); i++) {
+      a[i] = address_data[i];
+    }
+  }
+#endif
+
 	// now we have the HT entry number for every tuple
 	// compute the actual pointer to the data by adding it to the base HT pointer and multiplying by the tuple size
 	for (idx_t i = 0; i < groups.size(); i++) {
@@ -137,15 +152,6 @@ void PerfectAggregateHashTable::AddChunk(DataChunk &groups, DataChunk &payload) 
 		group_is_set[group] = true;
 		address_data[i] = uintptr_t(data) + group * tuple_size;
 	}
-
-#ifdef LINEAGE
-	if (lineage_manager->capture && active_log) {
-		auto ptrs = FlatVector::GetData<data_ptr_t>(addresses);
-		unique_ptr<data_ptr_t[]> addresses_copy(new data_ptr_t[groups.size()]);
-		std::copy(ptrs, ptrs + groups.size() , addresses_copy.get());
-		active_log->scatter_log.push_back({move(addresses_copy), groups.size()});
-	}
-#endif
 
 	// after finding the group location we update the aggregates
 	idx_t payload_idx = 0;

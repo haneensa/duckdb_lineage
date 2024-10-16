@@ -7,13 +7,22 @@ import os.path
 import json
 from pygg import *
 
+def get_lineage_type(args):
+    if args.lineage:
+        lineage_type = "SmokedDuck"
+    elif args.perm:
+        lineage_type = "Perm"
+    else:
+        lineage_type = "Baseline"
+    return lineage_type
+
 def relative_overhead(base, extra): # in %
     return max(((float(extra)-float(base))/float(base))*100, 0)
 
 def overhead(base, extra): # in ms
     return max(((float(extra)-float(base)))*1000, 0)
 
-def getAllExec(plan, op):
+def getAllExec(plan):
     """
     return execution time (sec) from profiling
     data stored in query plan
@@ -35,38 +44,23 @@ def find_node_wprefix(prefix, plan):
             break
     return op_name
 
-def getMat(plan, op):
+def getMat(plan):
     """
     return materialization time (sec) from
     profiling data stored in query plan
     """
     plan= plan.replace("'", "\"")
     plan = json.loads(plan)
-    op = find_node_wprefix("CREATE_TABLE_AS", plan)
-    if op == None:
-        return 0
-    return plan[op]
+    op1 = find_node_wprefix("CREATE_TABLE_AS", plan)
+    op2 = find_node_wprefix("RESULT_COLLECTOR", plan)
+    op3 = find_node_wprefix("BATCH_CREATE_TABLE_AS", plan)
+    return  plan.get(op1, 0) + plan.get(op2, 0) + plan.get(op3, 0)
 
-
-def get_op_timings(qid, op_name):
-    plan_fname = '{}_plan.json'.format(qid)
-    with open(plan_fname, 'r') as f:
-        plan = json.load(f)
-        print(plan)
-        op_timings = get_op_timings_local(plan, op_name)
-        print('X', op_timings)
-    os.remove(plan_fname)
-    return op_timings
-
-def get_op_timings_local(plan, op_name_match):
-    op_timings = None
-    for c in  plan['children']:
-        op_name = c['name'].strip()
-        timing = c['timing']
-        if op_name == op_name_match:
-            return timing
-        op_timings = get_op_timings_local(c, op_name_match)
-    return op_timings
+def get_op_timings(plan, op_name):
+    plan= plan.replace("'", "\"")
+    plan = json.loads(plan)
+    op = find_node_wprefix(op_name, plan)
+    return plan.get(op, -1)
 
 def gettimings(plan, res={}):
     for c in  plan['children']:
@@ -79,13 +73,14 @@ def gettimings(plan, res={}):
 def parse_plan_timings(qid):
     plan_fname = '{}_plan.json'.format(qid)
     plan_timings = {}
+    plan = {}
     with open(plan_fname, 'r') as f:
         plan = json.load(f)
         print(plan)
         plan_timings = gettimings(plan, {})
         print('X', plan_timings)
     os.remove(plan_fname)
-    return plan_timings
+    return plan_timings, plan
 
 def getStats(con, q):
     q_list = "select * from duckdb_queries_list() where query = ? order by query_id desc limit 1"
@@ -134,12 +129,16 @@ def Run(q, args, con, table_name=None):
     for j in range(args.repeat-1):
         df, duration = execute(q, con, args)
         dur_acc += duration
-        if args.lineage and args.stats==False:
+        if args.lineage and args.show_tables:
             DropLineageTables(con)
+        if args.lineage:
+            con.execute("PRAGMA clear_lineage")
         if table_name:
             con.execute("drop table {}".format(table_name))
     
     df, duration = execute(q, con, args)
+    if args.lineage and not args.stats:
+        con.execute("PRAGMA clear_lineage")
     dur_acc += duration
     if args.show_output:
         print(df)
@@ -206,26 +205,26 @@ def SelectivityGenerator(selectivity, card):
     print("execpted selectivity : ", sel, " actual: ", len(test_sel)/float(card))
     return result
 
-def MicroDataZipfan(folder, groups, cardinality, max_val, a_list):
+def MicroDataZipfan(con, groups, cardinality, a_list, max_val=100):
     for a in a_list:
         for g in groups:
             for card in cardinality:
-                filename = folder+"zipfan_g"+str(g)+"_card"+str(card)+"_a"+str(a)+".csv"
-                if not os.path.exists(filename):
-                    print("generate file: ", filename)
-                    if a == 0:
-                        zipfan = [random.randint(0, g-1) for _ in range(card)]
-                    else:
-                        z = ZipfanGenerator(g, a, card)
-                        zipfan = z.getAll()
-                    unique_elements, counts = np.unique(zipfan, return_counts=True)
-                    print(f"g={g}, card={card}, a={a}, len={len(zipfan)}")
-                    print("1. ", len(unique_elements), unique_elements[:10], unique_elements[len(unique_elements)-10:])
-                    print("2. ", counts[:10], counts[len(counts)-10:])
-                    vals = np.random.uniform(0, max_val, card)
-                    idx = list(range(0, card))
-                    df = pd.DataFrame({'idx':idx, 'z': zipfan, 'v': vals})
-                    df.to_csv(filename, index=False)
+                print("generate file: ", a, g, card)
+                if a == 0:
+                    zipfan = [random.randint(0, g-1) for _ in range(card)]
+                else:
+                    z = ZipfanGenerator(g, a, card)
+                    zipfan = z.getAll()
+                unique_elements, counts = np.unique(zipfan, return_counts=True)
+                print(f"g={g}, card={card}, a={a}, len={len(zipfan)}")
+                print("1. ", len(unique_elements), unique_elements[:10], unique_elements[len(unique_elements)-10:])
+                print("2. ", counts[:10], counts[len(counts)-10:])
+                vals = np.random.uniform(0, max_val, card)
+                idx = list(range(0, card))
+                df = pd.DataFrame({'idx':idx, 'z': zipfan, 'v': vals})
+                a_str = f'{a}'.replace('.', '_')
+                print(f"""create table zipf_micro_table_{a_str}_{g}_{card} as select * from df""")
+                con.execute(f"""create table zipf_micro_table_{a_str}_{g}_{card} as select * from df""")
 
 def MicroDataSelective(con, selectivity, cardinality, max_val=100):
     ## filter data
@@ -239,19 +238,17 @@ def MicroDataSelective(con, selectivity, cardinality, max_val=100):
             con.execute(f"""create table micro_table_{sel_str}_{card} as select * from df""")
             #print(con.execute(f"select * from micro_table_{sel_str}_{card} where z=0").df())
 
-def MicroDataMcopies(folder, copies, cardinality, max_val):
+def MicroDataMcopies(con, copies, cardinality, max_val):
     for m in copies:
         for card in cardinality:
-            filename = folder+"m"+str(m)+"copies_card"+str(card)+".csv"
-            if not os.path.exists(filename):
-                data = []
-                sequence = range(0, card)
-                for i in range(m):
-                    data.extend(sequence)
-                vals = np.random.uniform(0, max_val, card*m)
-                idx = list(range(0, card*m))
-                df = pd.DataFrame({'idx':idx, 'z': data, 'v': vals})
-                df.to_csv(filename, index=False)
+            data = []
+            sequence = range(0, card)
+            for i in range(m):
+                data.extend(sequence)
+            vals = np.random.uniform(0, max_val, card*m)
+            idx = list(range(0, card*m))
+            df = pd.DataFrame({'idx':idx, 'z': data, 'v': vals})
+            con.execute(f"""create table copies_micro_table_{m}_{card} as select * from df""")
 
 # Source Sans Pro Light
 legend = theme_bw() + theme(**{

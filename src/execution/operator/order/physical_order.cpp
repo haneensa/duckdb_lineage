@@ -106,7 +106,6 @@ SinkCombineResultType PhysicalOrder::Combine(ExecutionContext &context, Operator
 	auto &gstate = input.global_state.Cast<OrderGlobalSinkState>();
 	auto &lstate = input.local_state.Cast<OrderLocalSinkState>();
 	gstate.global_sort_state.AddLocalState(lstate.local_sort_state);
-
 	return SinkCombineResultType::FINISHED;
 }
 

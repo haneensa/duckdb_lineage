@@ -509,7 +509,6 @@ void RadixPartitionedHashTable::Combine(ExecutionContext &context, GlobalSinkSta
 
 void RadixPartitionedHashTable::Finalize(ClientContext &context, GlobalSinkState &gstate_p) const {
 	auto &gstate = gstate_p.Cast<RadixHTGlobalSinkState>();
-
 	if (gstate.uncombined_data) {
 		auto &uncombined_data = *gstate.uncombined_data;
 		gstate.count_before_combining = uncombined_data.Count();
@@ -713,7 +712,6 @@ void RadixHTLocalSourceState::Finalize(RadixHTGlobalSinkState &sink, RadixHTGlob
 	D_ASSERT(task == RadixHTSourceTaskType::FINALIZE);
 	D_ASSERT(scan_status != RadixHTScanStatus::IN_PROGRESS);
 	auto &partition = *sink.partitions[task_idx];
-
 	if (!ht) {
 		// This capacity would always be sufficient for all data
 		const auto capacity = GroupedAggregateHashTable::GetCapacityForCount(partition.data->Count());

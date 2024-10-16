@@ -250,17 +250,18 @@ idx_t GroupedAggregateHashTable::AddChunk(DataChunk &groups, Vector &group_hashe
 #endif
 
 	const auto new_group_count = FindOrCreateGroups(groups, group_hashes, state.addresses, state.new_groups);
+	VectorOperations::AddInPlace(state.addresses, NumericCast<int64_t>(layout.GetAggrOffset()), payload.size());
 #ifdef LINEAGE
   if (lineage_manager->capture && active_log) {
+		active_log->scatter_log.emplace_back();
 		auto ptrs = FlatVector::GetData<data_ptr_t>(state.addresses);
-		unique_ptr<data_ptr_t[]> addresses_copy(new data_ptr_t[groups.size()]);
-		std::copy(ptrs, ptrs + groups.size() , addresses_copy.get());
-		active_log->scatter_log.push_back({move(addresses_copy), groups.size()});
+    data_ptr_t* a  = new data_ptr_t[groups.size()];
+	  memcpy(a, ptrs, groups.size() * sizeof(data_ptr_t));
+		active_log->scatter_log.back().addresses = a;
+    active_log->scatter_log.back().count = groups.size();
     // TODO: capture child.out_start
 	}
 #endif
-	VectorOperations::AddInPlace(state.addresses, NumericCast<int64_t>(layout.GetAggrOffset()), payload.size());
-
 	// Now every cell has an entry, update the aggregates
 	auto &aggregates = layout.GetAggregates();
 	idx_t filter_idx = 0;
@@ -288,6 +289,7 @@ idx_t GroupedAggregateHashTable::AddChunk(DataChunk &groups, Vector &group_hashe
 		VectorOperations::AddInPlace(state.addresses, NumericCast<int64_t>(aggr.payload_size), payload.size());
 		filter_idx++;
 	}
+
 
 	Verify();
 	return new_group_count;

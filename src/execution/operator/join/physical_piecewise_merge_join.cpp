@@ -12,6 +12,10 @@
 #include "duckdb/parallel/event.hpp"
 #include "duckdb/parallel/thread_context.hpp"
 
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+#endif
+
 namespace duckdb {
 
 PhysicalPiecewiseMergeJoin::PhysicalPiecewiseMergeJoin(LogicalComparisonJoin &op, unique_ptr<PhysicalOperator> left,
@@ -421,13 +425,22 @@ void PhysicalPiecewiseMergeJoin::ResolveSimpleJoin(ExecutionContext &context, Da
 		}
 		// So we make a set of keys that have the validity mask set for the
 		PhysicalJoin::ConstructMarkJoinResult(lhs_table.keys, payload, chunk, found_match, gstate.table->has_null);
+#ifdef LINEAGE
+    // TODO: capture lineage
+#endif
 		break;
 	}
 	case JoinType::SEMI:
 		PhysicalJoin::ConstructSemiJoinResult(payload, chunk, found_match);
+#ifdef LINEAGE
+    // TODO: capture lineage
+#endif
 		break;
 	case JoinType::ANTI:
 		PhysicalJoin::ConstructAntiJoinResult(payload, chunk, found_match);
+#ifdef LINEAGE
+    // TODO: capture lineage
+#endif
 		break;
 	default:
 		throw NotImplementedException("Unimplemented join type for merge join");
@@ -550,6 +563,7 @@ OperatorResultType PhysicalPiecewiseMergeJoin::ResolveComplexJoin(ExecutionConte
 				// left join: before we move to the next chunk, see if we need to output any vectors that didn't
 				// have a match found
 				state.left_outer.ConstructLeftJoinResult(state.lhs_payload, chunk);
+        // TODO: capture lineage
 				state.left_outer.Reset();
 			}
 			state.first_fetch = true;
@@ -634,6 +648,16 @@ OperatorResultType PhysicalPiecewiseMergeJoin::ResolveComplexJoin(ExecutionConte
 					gstate.table->found_match[state.right_base + right_info.result[sel->get_index(i)]] = true;
 				}
 			}
+#ifdef LINEAGE
+      if (lineage_manager->capture && active_log && pactive_lop) {
+        left_info.result.Slice(*sel, result_count);
+        right_info.result.Slice(*sel, result_count);
+        active_log->nlj_log.push_back({move(left_info.result.sel_data()->owned_data), move(right_info.result.sel_data()->owned_data), result_count, 
+             state.right_base, pactive_lop->children[0]->out_start});
+        active_log->latest.first = active_log->nlj_log.size();
+        active_log->latest.second = 0;
+      }
+#endif
 			chunk.SetCardinality(result_count);
 			chunk.Verify();
 		}
@@ -753,6 +777,9 @@ SourceResultType PhysicalPiecewiseMergeJoin::GetData(ExecutionContext &context, 
 				result.data[left_column_count + col_idx].Slice(rhs_chunk.data[col_idx], rsel, result_count);
 			}
 			result.SetCardinality(result_count);
+#ifdef LINEAGE
+    // TODO: capture lineage
+#endif
 			break;
 		}
 	}

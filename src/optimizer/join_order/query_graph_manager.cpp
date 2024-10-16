@@ -444,6 +444,7 @@ unique_ptr<LogicalOperator> QueryGraphManager::LeftRightOptimizations(unique_ptr
 	return input_op;
 }
 
+#ifdef LINEAGE
 // For table A   table B
 //     x | y     y | z
 //     -----     -----
@@ -469,9 +470,11 @@ unique_ptr<LogicalOperator> QueryGraphManager::UndoShortCircuiting(unique_ptr<Lo
 	}
 
 	if (op->type == LogicalOperatorType::LOGICAL_COMPARISON_JOIN) {
+    //std::cout << "undoShortCircuiting: 1" << std::endl;
 		auto &join = op->Cast<LogicalComparisonJoin>();
 
 		if (join.join_type == JoinType::SEMI) {
+     // std::cout << "undoShortCircuiting: 2" << std::endl;
 			D_ASSERT(join.conditions.size() == 1);
 			D_ASSERT(join.conditions[0].comparison == ExpressionType::COMPARE_EQUAL);
 			D_ASSERT(join.conditions[0].right->type == ExpressionType::BOUND_COLUMN_REF);
@@ -498,5 +501,5 @@ unique_ptr<LogicalOperator> QueryGraphManager::UndoShortCircuiting(unique_ptr<Lo
 
 	return op;
 }
-
+#endif
 } // namespace duckdb

@@ -502,7 +502,7 @@ SinkFinalizeType PhysicalHashJoin::Finalize(Pipeline &pipeline, Event &event, Cl
 	}
 
 #ifdef LINEAGE
-	lineage_manager->Set(this->lop, (void*)&context);
+	lineage_manager->SetP(this->lop.get(), (void*)&context);
 #endif
 	// check for possible perfect hash table
 	auto use_perfect_hash = sink.perfect_join_executor->CanDoPerfectHashJoin();

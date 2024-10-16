@@ -19,8 +19,16 @@ static void GatherDelimScans(const PhysicalOperator &op, vector<const_reference<
 }
 
 unique_ptr<PhysicalOperator> PhysicalPlanGenerator::PlanDelimJoin(LogicalComparisonJoin &op) {
+
+  //std::cout << "========== op prior to PlanComparisonJoin =========" << std::endl;
+  //std::cout << op.ToString() << std::endl;
+  //std::cout << " ============== " << std::endl;
 	// first create the underlying join
 	auto plan = PlanComparisonJoin(op);
+  // note: right child is replaced with DELIM_SCAN and the input is from the outer join
+  //std::cout << "========== plan after PlanComparisonJoin =========" << std::endl;
+  //std::cout << plan->ToString() << std::endl;
+  //std::cout << " ============== " << std::endl;
 	// this should create a join, not a cross product
 	D_ASSERT(plan && plan->type != PhysicalOperatorType::CROSS_PRODUCT);
 	// duplicate eliminated join
@@ -28,6 +36,7 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::PlanDelimJoin(LogicalCompari
 	const idx_t delim_idx = op.delim_flipped ? 0 : 1;
 	vector<const_reference<PhysicalOperator>> delim_scans;
 	GatherDelimScans(*plan->children[delim_idx], delim_scans);
+  //std::cout << "======= delim scans count: " << delim_scans.size() << std::endl;
 	if (delim_scans.empty()) {
 		// no duplicate eliminated scans in the delim side!
 		// in this case we don't need to create a delim join

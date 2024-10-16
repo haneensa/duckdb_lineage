@@ -18,6 +18,7 @@ std::vector<int64_t> OperatorLineage::GatherStats() {
 	}
   
   for (int i=0; i < thread_vec.size(); i++) {
+
     int64_t local_lineage_size_mb = 0;
     int64_t local_tuples_count = 0;
     void* tkey = thread_vec[i];
@@ -29,7 +30,7 @@ std::vector<int64_t> OperatorLineage::GatherStats() {
     local_lineage_size_mb += chunk_count * sizeof(filter_artifact);
     for (int k=0; k < log[tkey]->filter_log.size(); ++k) {
       idx_t res_count = log[tkey]->filter_log[k].count;
-      if (log[tkey]->filter_log[k].sel)
+      if (log[tkey]->filter_log[k].sel) // only add if mem is alloc
         local_lineage_size_mb +=  res_count * sizeof(sel_t);
       local_tuples_count += res_count;
     }
@@ -40,7 +41,7 @@ std::vector<int64_t> OperatorLineage::GatherStats() {
     local_lineage_size_mb += chunk_count * sizeof(scan_artifact);
     for (int k=0; k < log[tkey]->row_group_log.size(); ++k) {
       idx_t res_count = log[tkey]->row_group_log[k].count;
-      if (log[tkey]->row_group_log[k].sel)
+      if (log[tkey]->row_group_log[k].sel) // only add if mem is alloc
         local_lineage_size_mb += res_count * sizeof(sel_t);
       local_tuples_count += res_count;
     }
@@ -114,7 +115,7 @@ std::vector<int64_t> OperatorLineage::GatherStats() {
     chunk_count += log[tkey]->nlj_log.size();
     for (int k=0; k < log[tkey]->nlj_log.size(); ++k) {
       idx_t count = log[tkey]->nlj_log[k].count;
-      local_lineage_size_mb += sizeof(nlj_artifact) 
+      local_lineage_size_mb += sizeof(nlj_artifact_uniq) 
                    +  (count * (sizeof(sel_t) + sizeof(sel_t)));
       local_tuples_count += count;
       if (log[tkey]->nlj_log[k].left != nullptr) {

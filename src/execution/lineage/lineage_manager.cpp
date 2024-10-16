@@ -12,10 +12,29 @@ namespace duckdb {
 
 unique_ptr<LineageManager> lineage_manager;
 thread_local Log* active_log;
-thread_local shared_ptr<OperatorLineage> active_lop;
+thread_local OperatorLineage* pactive_lop;
+
+void LineageManager::InitLog(shared_ptr<OperatorLineage> lop, void* thread_id) {
+  if (!capture || lop == nullptr) return;
+
+  std::lock_guard<std::mutex> lock(lop->glock);
+  if (lop->log.count(thread_id) == 0) {
+  //  std::cout << lop->operator_id << " " << thread_id << std::endl;
+    lop->log[thread_id] = make_uniq<Log>();
+    if (lop->type == PhysicalOperatorType::RIGHT_DELIM_JOIN || lop->type == PhysicalOperatorType::LEFT_DELIM_JOIN) {
+		  for (auto c : lop->children) {
+        std::lock_guard<std::mutex> lock(c->glock);
+        if (c->log.count(thread_id) == 0) {
+       // std::cout << c->operator_id << " delim " << thread_id << std::endl;
+          c->log[thread_id] = make_uniq<Log>();
+        }
+      }
+    }
+  }
+}
 
 shared_ptr<OperatorLineage> LineageManager::CreateOperatorLineage(ClientContext &context, PhysicalOperator *op) {
-	global_logger[(void*)op] = make_shared_ptr<OperatorLineage>(operators_ids[(void*)op], op->type, op->GetName());
+	global_logger[(void*)op] = make_shared_ptr<OperatorLineage>(op, operators_ids[(void*)op], op->type, op->GetName());
 	op->lop = global_logger[(void*)op];
 	InitLog(op->lop, (void*)&context);
 
@@ -33,6 +52,7 @@ shared_ptr<OperatorLineage> LineageManager::CreateOperatorLineage(ClientContext 
 			// dynamic_cast<PhysicalDelimJoin *>(op)->delim_scans[i]->lineage_op = distinct->lineage_op;
 		}
 		lop = CreateOperatorLineage(context, dynamic_cast<PhysicalDelimJoin *>(op)->join.get());
+   // std::cout << dynamic_cast<PhysicalDelimJoin *>(op)->join.get()->ToString() << std::endl;
 		global_logger[(void*)op]->children.push_back(lop);
 	}
 
@@ -46,8 +66,6 @@ shared_ptr<OperatorLineage> LineageManager::CreateOperatorLineage(ClientContext 
 
 // Iterate through in Postorder to ensure that children have PipelineLineageNodes set before parents
 int LineageManager::PlanAnnotator(PhysicalOperator *op, int counter) {
-	
-
   if (op->type == PhysicalOperatorType::RESULT_COLLECTOR) {
 		PhysicalOperator* plan = &dynamic_cast<PhysicalResultCollector*>(op)->plan;
     if (persist) std::cout << plan->ToString() << std::endl;
@@ -121,6 +139,8 @@ void LineageManager::StoreQueryLineage(ClientContext &context, PhysicalOperator 
 	idx_t query_id = query_to_id.size();
 	query_to_id.push_back(query);
 	queryid_to_plan[query_id] = lineage_manager->global_logger[(void *)op];
+  active_log = nullptr;
+  pactive_lop = nullptr;
   if (persist) CreateLineageTables(context, op, query_id);
 }
 

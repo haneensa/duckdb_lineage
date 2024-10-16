@@ -351,6 +351,7 @@ SinkResultType PhysicalHashAggregate::Sink(ExecutionContext &context, DataChunk 
 	auto &local_state = input.local_state.Cast<HashAggregateLocalSinkState>();
 	auto &global_state = input.global_state.Cast<HashAggregateGlobalSinkState>();
 
+
 	if (distinct_collection_info) {
 		SinkDistinct(context, chunk, input);
 	}

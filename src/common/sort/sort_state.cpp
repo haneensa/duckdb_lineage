@@ -307,7 +307,7 @@ void LocalSortState::ReOrder(SortedData &sd, data_ptr_t sorting_ptr, RowDataColl
 	const idx_t row_width = sd.layout.GetRowWidth();
 	const idx_t sorting_entry_size = gstate.sort_layout.entry_size;
 #ifdef LINEAGE
-	if (lineage_manager->capture && active_log && active_log->reorder_log.empty()) {
+	if (lineage_manager->capture && active_log) {
     active_log->reorder_log.emplace_back();
     vector<idx_t> &cur_lineage = active_log->reorder_log.back();
     cur_lineage.resize(count);
@@ -380,6 +380,7 @@ void LocalSortState::ReOrder(GlobalSortState &gstate, bool reorder_heap) {
 	const data_ptr_t sorting_ptr = sorting_handle.Ptr() + gstate.sort_layout.comparison_size;
 	// Re-order variable size sorting columns
 	if (!gstate.sort_layout.all_constant) {
+    // TODO: disable capture
 		ReOrder(*sb.blob_sorting_data, sorting_ptr, *blob_sorting_heap, gstate, reorder_heap);
 	}
 	// And the payload

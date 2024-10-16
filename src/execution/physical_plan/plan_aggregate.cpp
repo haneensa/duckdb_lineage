@@ -12,6 +12,10 @@
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/operator/logical_aggregate.hpp"
 
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+#endif
+
 namespace duckdb {
 
 static uint32_t RequiredBitsForValue(uint32_t n) {
@@ -180,6 +184,32 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalAggregate 
 		// groups! create a GROUP BY aggregator
 		// use a perfect hash aggregate if possible
 		vector<idx_t> required_bits;
+#ifdef LINEAGE
+    bool can_use_perfect = CanUsePerfectHashAggregate(context, op, required_bits);
+    if (lineage_manager && lineage_manager->explicit_agg_type != nullptr) {
+			if (*lineage_manager->explicit_agg_type.get() == "perfect" && can_use_perfect) {
+        groupby = make_uniq_base<PhysicalOperator, PhysicalPerfectHashAggregate>(
+            context, op.types, std::move(op.expressions), std::move(op.groups), std::move(op.group_stats),
+            std::move(required_bits), op.estimated_cardinality);
+			} else if (*lineage_manager->explicit_agg_type.get() == "reg" || !can_use_perfect) {
+        if (!can_use_perfect && *lineage_manager->explicit_agg_type.get() == "perfect")
+         std::cout << "can't use pefect hash aggregate. falling back to regular hash aggregate" << std::endl; 
+        groupby = make_uniq_base<PhysicalOperator, PhysicalHashAggregate>(
+            context, op.types, std::move(op.expressions), std::move(op.groups), std::move(op.grouping_sets),
+            std::move(op.grouping_functions), op.estimated_cardinality);
+			}
+		} else {
+      if (CanUsePerfectHashAggregate(context, op, required_bits)) {
+        groupby = make_uniq_base<PhysicalOperator, PhysicalPerfectHashAggregate>(
+            context, op.types, std::move(op.expressions), std::move(op.groups), std::move(op.group_stats),
+            std::move(required_bits), op.estimated_cardinality);
+      } else {
+        groupby = make_uniq_base<PhysicalOperator, PhysicalHashAggregate>(
+            context, op.types, std::move(op.expressions), std::move(op.groups), std::move(op.grouping_sets),
+            std::move(op.grouping_functions), op.estimated_cardinality);
+      }
+    }
+#else
 		if (CanUsePerfectHashAggregate(context, op, required_bits)) {
 			groupby = make_uniq_base<PhysicalOperator, PhysicalPerfectHashAggregate>(
 			    context, op.types, std::move(op.expressions), std::move(op.groups), std::move(op.group_stats),
@@ -189,6 +219,7 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalAggregate 
 			    context, op.types, std::move(op.expressions), std::move(op.groups), std::move(op.grouping_sets),
 			    std::move(op.grouping_functions), op.estimated_cardinality);
 		}
+#endif
 	}
 	groupby->children.push_back(std::move(plan));
 	return groupby;

@@ -26,9 +26,9 @@ parser.add_argument('--repeat', type=int, help="Repeat time for each query", def
 parser.add_argument('--folder', type=str, help='queries folder', default='benchmark/smokedduck-scripts/')
 args = parser.parse_args()
 args.profile = True
+args.stats = True
 print(args.profile)
 
-con = duckdb.connect(database=':memory:', read_only=False)
 prefix = args.folder + "queries/q"
 table_name=None
 size_avg = 0.0
@@ -64,40 +64,54 @@ gprom_list = [1, 2, 4, 5, 7, 9, 11, 12, 13, 15, 22]
 # 3, 7, 4
 results = []
 sf = args.sf
-con.execute("CALL dbgen(sf="+str(sf)+");")
+
+# semi join: 18, 20
 for th_id in threads_list:
-    con.execute("PRAGMA threads="+str(th_id))
     for i in range(1, 23):
+        dbname = f'tpch_{sf}.db'
+        if not os.path.exists(dbname):
+            con = duckdb.connect(dbname)
+            con.execute("CALL dbgen(sf="+str(sf)+");")
+        else:
+            con = duckdb.connect(dbname)
+        con.execute("PRAGMA threads="+str(th_id))
+        
+        print(f"running {th_id}, {i}")
         if args.gprom and i not in gprom_list: continue
         if (args.perm and args.opt == False) and ((i in dont_scale) or (sf>10 and i in dont_scale_20) or (sf==10 and i in dont_scale_10)): continue
-        if (args.gprom) and   (sf>10 and i in dont_scale_20 or i==1) or (sf==10 and i in dont_scale_10): continue
+        if (args.gprom) and  ((sf>10 and i in dont_scale_20 or i==1) or (sf==10 and i in dont_scale_10)): continue
         if args.perm and args.opt and i not in opt_queries: continue
         args.qid = i
+        # TODO: if i == 11 then replace the constant
         qfile = prefix+str(i).zfill(2)+".sql"
         text_file = open(qfile, "r")
         query = text_file.read().strip()
         query = ' '.join(query.split())
+        if sf == 10 and i == 11:
+            query = query.replace('0.000100000', '0.0000100000')
+        print(query)
         text_file.close()
         print("%%%%%%%%%%%%%%%% Running Query # ", i, " threads: ", th_id)
         print(query)
         avg, df = Run(query, args, con, table_name)
         print(df)
-        plan_timings = None
+        plan_timings = {}
+        plan_full = {}
         if args.profile:
-            plan_timings = parse_plan_timings(args.qid)
+            plan_timings, plan_full = parse_plan_timings(args.qid)
         output_size = len(df)
         if table_name:
             df = con.execute("select count(*) as c from {}".format(table_name)).fetchdf()
             output_size = df.loc[0,'c']
             con.execute("DROP TABLE "+table_name)
         print("**** output size: ", output_size)
-        stats = ""
-
+        lineage_size, lineage_count, nchunks, postprocess_time = 0, 0, 0, 0
+        plan = None
         if args.lineage and args.stats:
             lineage_size, lineage_count, nchunks, postprocess_time, plan = getStats(con, query)
             print(plan)
             size_avg += lineage_size
-            stats = "{},{},{},{}".format(lineage_size, lineage_count, nchunks, postprocess_time*1000)
+            postprocess_time *= 1000
         
         if args.show_tables:
             tables = con.execute("PRAGMA show_tables").fetchdf()
@@ -109,20 +123,22 @@ for th_id in threads_list:
                         print(con.execute(f"select * from {t}").df())
         if args.lineage:
             DropLineageTables(con)
-        results.append([i, avg, sf, args.repeat, lineage_type, th_id, output_size, stats, args.notes,plan_timings])
+        results.append({'query': i, 'runtime': avg, 'sf': sf, 'repeat': args.repeat,
+            'lineage_type': lineage_type, 'n_threads': th_id, 'output': output_size,
+            'lineage_size': lineage_size, 'lineage_count': lineage_count,
+            'nchunks': nchunks, 'postprocess_time': postprocess_time,
+            'notes': args.notes, 'plan_timings': str(plan_timings), 'plan': str(plan_full)})
+#os.remove(dbname)
 print("average", size_avg/22.0)
 if args.save_csv:
-    filename="tpch_benchmark_capture_{}.csv".format(args.notes)
-    print(filename)
-    header = ["query", "runtime", "sf", "repeat", "lineage_type", "n_threads", "output", "stats", "notes", "plan_timings"]
-    control = 'w'
+    dbname="tpch_benchmark_capture_{}.db".format(args.notes)
+    print(dbname)
+    con = duckdb.connect(dbname)
+    data = pd.DataFrame(results)
     if args.csv_append:
-        control = 'a'
-    add_header = not os.path.exists(filename)
-    if not add_header and control == 'w':
-        add_header = True
-    with open(filename, control) as csvfile:
-        csvwriter = csv.writer(csvfile)
-        if add_header:
-            csvwriter.writerow(header)
-        csvwriter.writerows(results)
+        con.execute(f"""create table if not exists tpch_capture as select * from data where 1=0""")
+        con.execute(f"""INSERT INTO tpch_capture SELECT * from data""")
+        print(con.execute("select * from tpch_capture").df())
+    else:
+        con.execute(f"""create or replace table tpch_capture as select * from data""")
+        print(con.execute("select * from tpch_capture").df())

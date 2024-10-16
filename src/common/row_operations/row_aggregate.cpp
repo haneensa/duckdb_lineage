@@ -84,14 +84,16 @@ void RowOperations::CombineStates(RowOperationsState &state, TupleDataLayout &la
 
 #ifdef LINEAGE
 	if (lineage_manager->capture && active_log) {
-		auto src_ptrs = FlatVector::GetData<data_ptr_t>(sources);
-		unique_ptr<data_ptr_t[]> src_copy(new data_ptr_t[count]);
-		std::copy(src_ptrs, src_ptrs + count , src_copy.get());
+		active_log->combine_log.emplace_back();
+		active_log->combine_log.back().count = count;
+
+		active_log->combine_log.back().src = unique_ptr<data_ptr_t[]>(new data_ptr_t[count]);
+    auto src_ptrs = FlatVector::GetData<data_ptr_t>(sources);
+    memcpy(active_log->combine_log.back().src.get(), src_ptrs, count * sizeof(data_ptr_t));
 
 		auto target_ptrs = FlatVector::GetData<data_ptr_t>(targets);
-		unique_ptr<data_ptr_t[]> target_copy(new data_ptr_t[count]);
-		std::copy(target_ptrs, target_ptrs + count , target_copy.get());
-		active_log->combine_log.push_back({move(src_copy), move(target_copy), count});
+		active_log->combine_log.back().target = unique_ptr<data_ptr_t[]>(new data_ptr_t[count]);
+    memcpy(active_log->combine_log.back().target.get(), target_ptrs, count * sizeof(data_ptr_t));
 	}
 #endif
 
@@ -115,6 +117,7 @@ void RowOperations::CombineStates(RowOperationsState &state, TupleDataLayout &la
 	// Now subtract the offset to get back to the original position
 	VectorOperations::AddInPlace(sources, -UnsafeNumericCast<int64_t>(offset), count);
 	VectorOperations::AddInPlace(targets, -UnsafeNumericCast<int64_t>(offset), count);
+
 }
 
 void RowOperations::FinalizeStates(RowOperationsState &state, TupleDataLayout &layout, Vector &addresses,
@@ -126,13 +129,13 @@ void RowOperations::FinalizeStates(RowOperationsState &state, TupleDataLayout &l
 
 	//	Move to the first aggregate state
 	VectorOperations::AddInPlace(addresses_copy, UnsafeNumericCast<int64_t>(layout.GetAggrOffset()), result.size());
-
 #ifdef LINEAGE
 	if (lineage_manager->capture && active_log) {
-		auto ptrs = FlatVector::GetData<data_ptr_t>(addresses);
-		unique_ptr<data_ptr_t[]> addresses_copy(new data_ptr_t[result.size()]);
-		std::copy(ptrs, ptrs + result.size() , addresses_copy.get());
-		active_log->finalize_states_log.push_back({move(addresses_copy), result.size()});
+		active_log->finalize_states_log.emplace_back();
+		active_log->finalize_states_log.back().count = result.size();
+		active_log->finalize_states_log.back().addresses = unique_ptr<data_ptr_t[]>(new data_ptr_t[result.size()]);
+    auto ptrs = FlatVector::GetData<data_ptr_t>(addresses_copy);
+    memcpy(active_log->finalize_states_log.back().addresses.get(), ptrs, result.size() * sizeof(data_ptr_t));
 	}
 #endif
 
@@ -146,6 +149,7 @@ void RowOperations::FinalizeStates(RowOperationsState &state, TupleDataLayout &l
 		// Move to the next aggregate state
 		VectorOperations::AddInPlace(addresses_copy, UnsafeNumericCast<int64_t>(aggr.payload_size), result.size());
 	}
+
 }
 
 } // namespace duckdb
