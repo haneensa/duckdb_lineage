@@ -259,7 +259,6 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
     if (branch == 0) {
       count = log->filter_log[lsn].count;
       offset = log->filter_log[lsn].in_start;
-      data_ptr_t ptr = nullptr;
       if (log->filter_log[lsn].sel) {
         ptr = (data_ptr_t)log->filter_log[lsn].sel;
       }
