@@ -52,7 +52,7 @@ def MtM(con, iter, args, lineage_type, groups, cardinality, a_list, results, op,
         if args.lineage:
             lineage_size_mb, lineage_count, nchunks, postprocess, plan = getStats(con, q)
         plan_timings, plan_full = parse_plan_timings(args.qid)
-        results.append({'iter': iter, 'op_name': f'{op}_mtm{varchar}', 'runtime': avg, 'n1': card, 'n2': g,
+        results.append({'iter': iter, 'op_name': f'{op}_mtm{varchar}', 'runtime': avg, 'n1': n1, 'n2': card,
             'sel': sel, 'skew': a, 'ncol': p, 'groups': g,
             'output_size': output_size, 'lineage_size_mb': lineage_size_mb,
             'lineage_count': lineage_count, 'nchunks': nchunks,

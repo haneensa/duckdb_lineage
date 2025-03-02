@@ -33,6 +33,10 @@ public:
 
 	ExpressionExecutor executor;
 	SelectionVector sel;
+#ifdef LINEAGE
+  vector<idx_t> lineage;
+  idx_t offset = 0;
+#endif
 
 public:
 	void Finalize(const PhysicalOperator &op, ExecutionContext &context) override {
@@ -48,6 +52,16 @@ OperatorResultType PhysicalFilter::ExecuteInternal(ExecutionContext &context, Da
                                                    GlobalOperatorState &gstate, OperatorState &state_p) const {
 	auto &state = state_p.Cast<FilterState>();
 	idx_t result_count = state.executor.SelectExpression(input, state.sel);
+
+#ifdef LINEAGE
+  if (lineage_manager && lineage_manager->smoke) {
+    for (auto i=0; i < result_count; i++) {
+      state.lineage.push_back(state.sel.get_index(i) + state.offset);
+    }
+    state.offset += result_count;
+  }
+#endif
+
 	if (result_count == input.size()) {
 #ifdef LINEAGE
     if (lineage_manager->capture && active_log && pactive_lop) {

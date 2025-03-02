@@ -27,6 +27,18 @@ namespace duckdb {
     for (int i=0; i < bnlj_log.size(); ++i) {
       delete bnlj_log[i].sel;
     }
+    for (int i=0; i < join_gather_log.size(); ++i) {
+      delete join_gather_log[i].rhs;
+      delete join_gather_log[i].lhs;
+    }
+    for (int i=0; i < scatter_sel_log.size(); ++i) {
+      delete scatter_sel_log[i].addresses;
+      delete scatter_sel_log[i].sel;
+    }
+    for (int i=0; i < perfect_probe_ht_log.size(); ++i) {
+      delete perfect_probe_ht_log[i].right;
+      delete perfect_probe_ht_log[i].left;
+    }
   }
 } // namespace duckdb
 #endif

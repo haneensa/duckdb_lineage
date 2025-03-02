@@ -17,3 +17,5 @@ do
 done
 
 python3 ~/smokedduck/benchmark/smokedduck-scripts/tpch_plot.py --db tpch_benchmark_capture_$note.db
+
+echo $note

@@ -47,8 +47,8 @@ struct filter_artifact {
 };
 
 struct perfect_join_artifact {
-	unique_ptr<sel_t[]> left;
-	unique_ptr<sel_t[]> right;
+	sel_t* left;
+	sel_t* right;
 	idx_t count;
 	idx_t in_start;
 };
@@ -76,8 +76,8 @@ struct int_address_artifact {
 };
 
 struct address_sel_artifact {
-	unique_ptr<data_ptr_t[]> addresses;
-	unique_ptr<sel_t[]> sel;
+	data_ptr_t* addresses;
+	sel_t* sel;
 	idx_t count;
   idx_t in_start;
 };
@@ -89,8 +89,8 @@ struct combine_artifact {
 };
 
 struct join_gather_artifact {
-	unique_ptr<data_ptr_t[]> rhs;
-	unique_ptr<sel_t[]> lhs;
+	data_ptr_t* rhs;
+	sel_t* lhs;
 	idx_t count;
   idx_t in_start;
 };

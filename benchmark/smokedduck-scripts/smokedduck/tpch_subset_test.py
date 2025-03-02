@@ -12,9 +12,12 @@ with smokedduck.connect(':default:') as con:
 
     #  streaming_limit
     skip_list = []
-    # 16 (column_data_scan, mark), 21 (right, semi, anti), 22 (right_delim_join, mark, right_anti), 4 (right_delim_join, right_semi)
+    # 21, 4, 20, 17, 2 -> can be handled without modification
+    #  16, 22 -> need to test short circuiting modification
+    
+    # 21 (right_semi), 22 (right_delim_join, mark, right_anti), 4 (right_delim_join, right_semi)
     # 20 (right_delim_join, right), 17 (right_delim_join, right), 2 (right_delim_join, right),
-    for i in [17]: #1, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 18, 19]:
+    for i in [16]: #1, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 18, 19]:
         if i in skip_list:
             print(f"############# {i} SKIP ###########")
             continue

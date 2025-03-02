@@ -88,12 +88,18 @@ public:
 	mutex lock;
 	//! The global aggregate hash table
 	unique_ptr<PerfectAggregateHashTable> ht;
+#ifdef LINEAGE
+  vector<Vector> lineage_smoke;
+#endif
 };
 
 class PerfectHashAggregateLocalState : public LocalSinkState {
 public:
 	PerfectHashAggregateLocalState(const PhysicalPerfectHashAggregate &op, ExecutionContext &context)
 	    : ht(op.CreateHT(Allocator::Get(context.client), context.client)) {
+#ifdef LINEAGE
+        offset = 0;
+#endif
 		group_chunk.InitializeEmpty(op.group_types);
 		if (!op.payload_types.empty()) {
 			aggregate_input_chunk.InitializeEmpty(op.payload_types);
@@ -104,6 +110,9 @@ public:
 	unique_ptr<PerfectAggregateHashTable> ht;
 	DataChunk group_chunk;
 	DataChunk aggregate_input_chunk;
+#ifdef LINEAGE
+  idx_t offset;
+#endif
 };
 
 unique_ptr<GlobalSinkState> PhysicalPerfectHashAggregate::GetGlobalSinkState(ClientContext &context) const {
@@ -119,6 +128,22 @@ SinkResultType PhysicalPerfectHashAggregate::Sink(ExecutionContext &context, Dat
 	auto &lstate = input.local_state.Cast<PerfectHashAggregateLocalState>();
 	DataChunk &group_chunk = lstate.group_chunk;
 	DataChunk &aggregate_input_chunk = lstate.aggregate_input_chunk;
+  
+
+#ifdef LINEAGE
+  if (lineage_manager && lineage_manager->smoke) {
+    if (chunk.ColumnCount() < aggregate_input_chunk.ColumnCount() + group_chunk.ColumnCount()) {
+      DataChunk annotations;
+      annotations.Initialize(context.client, {LogicalType::ROW_TYPE});
+      annotations.SetCardinality(chunk.size());
+      annotations.data[0].Sequence(lstate.offset, 1, chunk.size());
+      chunk.Fuse(annotations);
+    } else {
+      chunk.data[chunk.ColumnCount()-1].Sequence(lstate.offset, 1, chunk.size());
+    }
+    lstate.offset += chunk.size();
+  }
+#endif
 
 	for (idx_t group_idx = 0; group_idx < groups.size(); group_idx++) {
 		auto &group = groups[group_idx];
@@ -135,6 +160,7 @@ SinkResultType PhysicalPerfectHashAggregate::Sink(ExecutionContext &context, Dat
 			aggregate_input_chunk.data[aggregate_input_idx++].Reference(chunk.data[bound_ref_expr.index]);
 		}
 	}
+
 	for (auto &aggregate : aggregates) {
 		auto &aggr = aggregate->Cast<BoundAggregateExpression>();
 		if (aggr.filter) {
@@ -192,6 +218,18 @@ SourceResultType PhysicalPerfectHashAggregate::GetData(ExecutionContext &context
 	auto &gstate = sink_state->Cast<PerfectHashAggregateGlobalState>();
 
 	gstate.ht->Scan(state.ht_scan_position, chunk);
+
+  if (lineage_manager && lineage_manager->smoke) {
+    DataChunk annotations;
+    chunk.Split(annotations, chunk.ColumnCount()-1);
+    gstate.lineage_smoke.push_back(move(annotations.data[0]));
+
+    auto typ = {LogicalType::LIST(LogicalType::ROW_TYPE)};
+    DataChunk newAnn;
+    newAnn.Initialize(context.client, typ, chunk.size());
+    chunk.Fuse(newAnn);
+  }
+  
 
 	if (chunk.size() > 0) {
 		return SourceResultType::HAVE_MORE_OUTPUT;

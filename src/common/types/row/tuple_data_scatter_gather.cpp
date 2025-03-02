@@ -555,14 +555,14 @@ void TupleDataCollection::Scatter(TupleDataChunkState &chunk_state, const DataCh
 #endif
 #ifdef LINEAGE
     if (active_log && pactive_lop && active_log->capture) {
-			unique_ptr<data_ptr_t[]> addresses_copy(new data_ptr_t[append_count]);
-			std::copy(row_locations, row_locations + append_count , addresses_copy.get());
+			data_ptr_t* addresses_copy = (data_ptr_t*)malloc(sizeof(data_ptr_t)*append_count);
+		  memcpy(addresses_copy, row_locations,  append_count * sizeof(sel_t));
       if (append_sel.data()) {
-        unique_ptr<sel_t []> sel_copy(new sel_t[append_count]);
-        std::copy(append_sel.data(), append_sel.data() + append_count, sel_copy.get());
-			  active_log->scatter_sel_log.push_back({move(addresses_copy), move(sel_copy), append_count, pactive_lop->children[1]->out_start});
+        sel_t* sel_copy = (sel_t*)malloc(sizeof(sel_t) * append_count);
+		    memcpy(sel_copy, append_sel.data(),  append_count * sizeof(sel_t));
+			  active_log->scatter_sel_log.push_back({addresses_copy, sel_copy, append_count, pactive_lop->children[1]->out_start});
       } else {
-			  active_log->scatter_sel_log.push_back({move(addresses_copy), nullptr, append_count, pactive_lop->children[1]->out_start});
+			  active_log->scatter_sel_log.push_back({addresses_copy, nullptr, append_count, pactive_lop->children[1]->out_start});
       }
 		}
 #endif

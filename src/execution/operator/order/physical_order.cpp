@@ -8,6 +8,10 @@
 #include "duckdb/storage/buffer_manager.hpp"
 #include "duckdb/common/shared_ptr.hpp"
 
+#ifdef LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+#endif
+
 namespace duckdb {
 
 PhysicalOrder::PhysicalOrder(vector<LogicalType> types, vector<BoundOrderByNode> orders, vector<idx_t> projections,
@@ -73,6 +77,18 @@ unique_ptr<LocalSinkState> PhysicalOrder::GetLocalSinkState(ExecutionContext &co
 SinkResultType PhysicalOrder::Sink(ExecutionContext &context, DataChunk &chunk, OperatorSinkInput &input) const {
 	auto &gstate = input.global_state.Cast<OrderGlobalSinkState>();
 	auto &lstate = input.local_state.Cast<OrderLocalSinkState>();
+  
+  if (lineage_manager && lineage_manager->smoke) {
+    if (chunk.ColumnCount() < lstate.payload.ColumnCount()) {
+      DataChunk annotations;
+      annotations.Initialize(context.client, {LogicalType::ROW_TYPE});
+      annotations.SetCardinality(chunk.size());
+      annotations.data[0].Sequence(0, 1, chunk.size());
+      chunk.Fuse(annotations);
+    } else {
+      chunk.data[chunk.ColumnCount()-1].Sequence(0, 1, chunk.size());
+    }
+  }
 
 	auto &global_sort_state = gstate.global_sort_state;
 	auto &local_sort_state = lstate.local_sort_state;
@@ -212,6 +228,9 @@ public:
 public:
 	atomic<idx_t> next_batch_index;
 	idx_t total_batches;
+#ifdef LINEAGE
+  vector<Vector> lineage_smoke;
+#endif
 };
 
 unique_ptr<GlobalSourceState> PhysicalOrder::GetGlobalSourceState(ClientContext &context) const {
@@ -256,6 +275,17 @@ SourceResultType PhysicalOrder::GetData(ExecutionContext &context, DataChunk &ch
 	}
 
 	lstate.scanner->Scan(chunk);
+
+  if (lineage_manager && lineage_manager->smoke) {
+    DataChunk annotations;
+    chunk.Split(annotations, chunk.ColumnCount()-1);
+    gstate.lineage_smoke.push_back(move(annotations.data[0]));
+
+    auto typ = {LogicalType::LIST(LogicalType::ROW_TYPE)};
+    DataChunk newAnn;
+    newAnn.Initialize(context.client, typ, chunk.size());
+    chunk.Fuse(newAnn);
+  }
 
 	return chunk.size() == 0 ? SourceResultType::FINISHED : SourceResultType::HAVE_MORE_OUTPUT;
 }

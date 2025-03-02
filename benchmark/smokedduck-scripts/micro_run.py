@@ -16,6 +16,7 @@ parser.add_argument('--show_output', action='store_true',  help="Print query out
 parser.add_argument('--show_tables', action='store_true',  help="Print query output")
 parser.add_argument('--lineage', action='store_true',  help="Enable lineage")
 parser.add_argument('--perm', action='store_true',  help="Enable lineage")
+parser.add_argument('--smoke', action='store_true',  help="Enable Smoke")
 parser.add_argument('--notes', type=str,  help="exp notes", default="")
 parser.add_argument('--save', action='store_true',  help="save result in csv")
 parser.add_argument('--run_filter', action='store_true',  help="eval filter")
@@ -48,15 +49,15 @@ agg_results = []
 ##########################################################
 # Creating connection
 ############################################
-# Q = select * from T where v=0
-# T(idx int, v int, col float)
+# Q = select * from T where z=0
+# T(idx int, z int, col float)
 # |T| in {1M, 5M, 10M}
 # sel in {0.02, 0.2, 0.5, 1.0}
 ############################################
 
 if run_filter:
-    selectivity = [0.02, 0.2, 0.5, 1.0]
-    cardinality = [1000000, 5000000, 10000000]
+    selectivity = [0.5] #0.02, 0.2, 0.5, 1.0]
+    cardinality = [10] #1000000, 5000000, 10000000]
     setting = [False, True]
     for pushdown in setting:
         for r in range(args.repeat):
@@ -69,6 +70,7 @@ if run_filter:
                 con = duckdb.connect(db_name)
 
             con.execute("PRAGMA threads=1")
+            con.execute("drop table if exists t1_perm_lineage")
             
             FilterMicro(con, r, args, lineage_type, selectivity, cardinality, filter_results, pushdown)
 
@@ -93,15 +95,17 @@ def VarCharZipfan(con, groups, cardinality, a_list):
 # g in {10, 100, 1000}
 ############################################
 if run_agg:
-    groups = [10] #, 100, 1000]
-    cardinality = [1000000] #, 5000000, 10000000]
+    groups = [10, 100, 1000]
+    cardinality = [1000000, 5000000, 10000000]
     a_list = [1]
     settings =  [[False, False, False,  "PERFECT_HASH_GROUP_BY"],
          [False, False, False,  "HASH_GROUP_BY"],
          [False, False, False,  "VAR"]]
 
     if args.perm:
+        settings.append([True, False, False,  "PERFECT_HASH_GROUP_BY"])
         settings.append([True, False, False,  "HASH_GROUP_BY"])
+        settings.append([True, False, False,  "VAR"])
         settings.append([False, False, True,  "HASH_GROUP_BY"])
         settings.append([False, True, False,  "HASH_GROUP_BY"])
 
@@ -189,7 +193,7 @@ if run_hj:
             FKPK(con, r, args, lineage_type, groups, cardinality, a_list, join_results, op, s)
 
 if run_hj_mtn:
-    settings = ["", "varchar_"]
+    settings = ["varchar_", ""]
     for s in settings:
         for r in range(args.repeat):
             db_name = 'join_mtn_micro_db.out'

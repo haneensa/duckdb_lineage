@@ -62,21 +62,22 @@ unique_ptr<LogicalOperator> JoinOrderOptimizer::Optimize(unique_ptr<LogicalOpera
 		}
 	}
 
-#ifdef LINEAGE
-	if (stats == nullptr && lineage_manager->capture) {
-    //std::cout << "undoShortCircuit" << std::endl;
-    //std::cout << new_logical_plan->ToString() << std::endl;
-		new_logical_plan = query_graph_manager.UndoShortCircuiting(std::move(new_logical_plan));
-    //std::cout << new_logical_plan->ToString() << std::endl;
-	}
-#endif
-
 	// only perform left right optimizations when stats is null (means we have the top level optimize call)
 	// Don't check reorderability because non-reorderable joins will result in 1 relation, but we can
 	// still switch the children.
 	if (stats == nullptr && HasJoin(new_logical_plan.get())) {
 		new_logical_plan = query_graph_manager.LeftRightOptimizations(std::move(new_logical_plan));
 	}
+#ifdef LINEAGE
+	if (stats == nullptr && lineage_manager->capture && lineage_manager->enable_short ) {
+    //std::cout << "********** before undoShortCircuit" << std::endl;
+    //std::cout << new_logical_plan->ToString() << std::endl;
+		new_logical_plan = query_graph_manager.UndoShortCircuiting(std::move(new_logical_plan));
+    //std::cout << "######### after undoShortCircuit" << std::endl;
+    //std::cout << new_logical_plan->ToString() << std::endl;
+	}
+#endif
+
 
 	// Propagate up a stats object from the top of the new_logical_plan if stats exist.
 	if (stats) {

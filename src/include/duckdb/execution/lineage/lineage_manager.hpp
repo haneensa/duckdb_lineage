@@ -28,7 +28,7 @@ extern thread_local OperatorLineage* pactive_lop;
 */
 class LineageManager {
 public:
-	explicit LineageManager() : capture(false), persist(false), enable_filter_pushdown(true) {}
+	explicit LineageManager() : smoke(false), capture(false), persist(false), enable_filter_pushdown(true), enable_short(true) {}
 	void InitOperatorPlan(ClientContext &context, PhysicalOperator *op);
 	shared_ptr<OperatorLineage> CreateOperatorLineage(ClientContext &context, PhysicalOperator *op);
 	int PlanAnnotator(PhysicalOperator *op, int counter);
@@ -65,6 +65,7 @@ public:
 	}
 
 public:
+  bool smoke;
   bool capture;
   bool persist;
   std::unordered_map<void*, shared_ptr<OperatorLineage>> global_logger;
@@ -78,6 +79,7 @@ public:
 
   // micro benchmark flags
   bool enable_filter_pushdown;
+  bool enable_short;
   unique_ptr<string> explicit_join_type = nullptr;
   unique_ptr<string> explicit_agg_type = nullptr;
 };

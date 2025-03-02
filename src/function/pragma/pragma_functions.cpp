@@ -127,6 +127,22 @@ static void PragmaDisableOptimizer(ClientContext &context, const FunctionParamet
 }
 
 #ifdef LINEAGE
+static void PragmaEnableSmoke(ClientContext &context, const FunctionParameters &parameters) {
+  if (!lineage_manager) lineage_manager = make_uniq<LineageManager>();
+	lineage_manager->smoke = true;
+	lineage_manager->capture = false;
+  lineage_manager->persist = false;
+	std::cout << "\nEnable Smoke Capture" << std::endl;
+}
+
+static void PragmaDisableSmoke(ClientContext &context, const FunctionParameters &parameters) {
+  if (!lineage_manager) lineage_manager = make_uniq<LineageManager>();
+	lineage_manager->smoke = false;
+	lineage_manager->capture = false;
+  lineage_manager->persist = false;
+	std::cout << "\nDisable Smoke Capture" << std::endl;
+}
+
 static void PragmaEnableLineage(ClientContext &context, const FunctionParameters &parameters) {
   if (!lineage_manager) lineage_manager = make_uniq<LineageManager>();
 	lineage_manager->capture = true;
@@ -164,6 +180,14 @@ static void PragmaEnableFilterPushDown(ClientContext &context, const FunctionPar
 	std::cout << "Enable Filter Pushdown" << std::endl;
 }
 
+static void PragmaDisableShort(ClientContext &context, const FunctionParameters &parameters) {
+  if (lineage_manager) lineage_manager->enable_short = false;
+  std::cout << "Disable Short Circuiting" << std::endl;
+}
+static void PragmaEnableShort(ClientContext &context, const FunctionParameters &parameters) {
+  if (lineage_manager) lineage_manager->enable_short = true;
+	std::cout << "Enable Short Circuiting" << std::endl;
+}
 static void PragmaSetJoin(ClientContext &context, const FunctionParameters &parameters) {
 	string join_type = parameters.values[0].ToString();
 	D_ASSERT(join_type == "hash" || join_type == "merge" || join_type == "nl" || join_type == "index" || join_type == "block" || join_type == "clear");
@@ -228,12 +252,16 @@ void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
 	set.AddFunction(
 	    PragmaFunction::PragmaStatement("disable_checkpoint_on_shutdown", PragmaDisableCheckpointOnShutdown));
 #ifdef LINEAGE
+	set.AddFunction(PragmaFunction::PragmaStatement("enable_smoke", PragmaEnableSmoke));
+	set.AddFunction(PragmaFunction::PragmaStatement("disable_smoke", PragmaDisableSmoke));
 	set.AddFunction(PragmaFunction::PragmaStatement("enable_lineage", PragmaEnableLineage));
 	set.AddFunction(PragmaFunction::PragmaStatement("disable_lineage", PragmaDisableLineage));
 	set.AddFunction(PragmaFunction::PragmaStatement("clear_lineage", PragmaClearLineage));
 	set.AddFunction(PragmaFunction::PragmaStatement("persist_lineage", PragmaPersistLineage));
 	set.AddFunction(PragmaFunction::PragmaStatement("enable_filter_pushdown", PragmaEnableFilterPushDown));
 	set.AddFunction(PragmaFunction::PragmaStatement("disable_filter_pushdown", PragmaDisableFilterPushDown));
+	set.AddFunction(PragmaFunction::PragmaStatement("enable_short", PragmaEnableShort));
+	set.AddFunction(PragmaFunction::PragmaStatement("disable_short", PragmaDisableShort));
 	set.AddFunction(PragmaFunction::PragmaCall("set_join", PragmaSetJoin, {LogicalType::VARCHAR}));
 	set.AddFunction(PragmaFunction::PragmaCall("set_agg", PragmaSetAgg, {LogicalType::VARCHAR}));
 #endif

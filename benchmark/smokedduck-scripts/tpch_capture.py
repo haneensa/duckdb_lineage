@@ -17,6 +17,7 @@ parser.add_argument('--show_output', action='store_true',  help="Print query out
 parser.add_argument('--stats', action='store_true',  help="Get lineage size, nchunks and postprocess time")
 parser.add_argument('--query_lineage', action='store_true',  help="query lineage")
 parser.add_argument('--perm', action='store_true',  help="use perm queries")
+parser.add_argument('--smoke', action='store_true',  help="use smoke queries")
 parser.add_argument('--gprom', action='store_true',  help="use perm queries")
 parser.add_argument('--opt', action='store_true',  help="use optimized")
 parser.add_argument('--save_csv', action='store_true',  help="save result in csv")
@@ -64,8 +65,8 @@ gprom_list = [1, 2, 4, 5, 7, 9, 11, 12, 13, 15, 22]
 # 3, 7, 4
 results = []
 sf = args.sf
-
-# semi join: 18, 20
+# 4
+# semi join:, 20
 for th_id in threads_list:
     for i in range(1, 23):
         dbname = f'tpch_{sf}.db'
@@ -92,7 +93,6 @@ for th_id in threads_list:
         print(query)
         text_file.close()
         print("%%%%%%%%%%%%%%%% Running Query # ", i, " threads: ", th_id)
-        print(query)
         avg, df = Run(query, args, con, table_name)
         print(df)
         plan_timings = {}

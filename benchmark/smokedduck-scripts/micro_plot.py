@@ -5,7 +5,7 @@ import argparse
 from pygg import *
 import duckdb
 from duckdb.typing import *
-from utils import legend_bottom, legend_side, relative_overhead, overhead, getAllExec, getMat, get_op_timings
+from utils import legend_bottom, legend_none, legend_side, relative_overhead, overhead, getAllExec, getMat, get_op_timings
 
 
 parser = argparse.ArgumentParser(description='TPCH benchmarking script')
@@ -167,15 +167,27 @@ if plot_filter:
                       """).df()
     where = f"WHERE op_name IN ('SEQ_SCAN','FILTER') {cond}"
     data  = con.execute(template.format(g, g, g, where)).fetchdf()
+    data = con.execute("""select 'SD' as sys_label, * from data where system='SmokedDuck' UNION ALL 
+    SELECT 'Logical' as sys_label, * from data where system='Perm' """).df()
+    data['op_label'] = data['op_name'].apply(lambda x: "Filter Scan" if x=="SEQ_SCAN" else "Filter")
     print(data)
+    sample_data = con.execute("select * from data where overheadType<>'Execute'").df()
+    sample_data_card = con.execute("select * from data where overheadType<>'Execute' and card=10000000").df()
+    xkwargs=dict(labels=list(map(esc, ['0', '.25', '.5', '.75', '1'])))
     # 1. x-axis: selectivity, y-axis: runtime, facet: cardinality
     for idx, y_axis in enumerate(y_axis_list):
-        x_axis, x_label, color, facet = "sel", "Sel", "system", "op_name~card"
-        #x_type, y_type, y_label = "continuous",  "continueous", "{}".format(y_header[idx])
+        x_axis, x_label, color, facet = "sel", "Sel", "sys_label", "op_label~card"
         x_type, y_type, y_label = "continuous",  "log10", "{} [log]".format(y_header[idx])
         fname, w, h = "micro_{}_line_filter.png".format(y_axis), 12, 6
+        PlotLines(sample_data, x_axis, y_axis, x_label, y_label, x_type, y_type, color, linetype, facet, fname, w, h, None, None)
+        
+        fname, w, h = "micro_all_{}_line_filter.png".format(y_axis), 12, 6
         PlotLines(data, x_axis, y_axis, x_label, y_label, x_type, y_type, color, linetype, facet, fname, w, h, None, None)
 
+        x_axis, x_label, color, facet = "sel", "Sel", "sys_label", "~op_label"
+        x_type, y_type, y_label = "continuous",  "log10", "{} [log]".format(y_header[idx])
+        fname, w, h = "micro_{}_line_filter_10M.png".format(y_axis), 6.5, 2.5
+        PlotLines(sample_data_card, x_axis, y_axis, x_label, y_label, x_type, y_type, color, linetype, facet, fname, w, h, None, xkwargs)
 
     # write summary: 
     # metrics: relative overhead, overhead, Speedup (Logical/SD)
@@ -192,6 +204,23 @@ if plot_filter:
                 order by overheadtype, system, op_name, sel
                 """).df()
         print(summary)
+        
+        summary = con.execute(f"""select overheadtype, system, op_name,
+                avg(overhead), max(overhead), min(overhead),
+                avg(roverhead), max(roverhead), min(roverhead)
+                from data {scond} group by overheadtype, system, op_name
+                order by overheadtype, system, op_name
+                """).df()
+        print(summary)
+        # TODO: add speedup
+
+    summary = con.execute(f"""select overheadtype, system, 
+            avg(overhead), max(overhead), min(overhead),
+            avg(roverhead), max(roverhead), min(roverhead)
+            from data group by overheadtype, system
+            order by overheadtype, system
+            """).df()
+    print(summary)
 
 
 
@@ -230,14 +259,15 @@ if plot_join:
     for op_name in op_names:
         where = f"WHERE op_name IN ('{op_name}') {cond}"
         data  = con.execute(template.format(g, g, g, where)).fetchdf()
-        print(data)
+        sample_data = con.execute("select * from data where overheadType<>'Execute'").df()
+        print(sample_data)
         # 1. x-axis: selectivity, y-axis: runtime, facet: cardinality
         for idx, y_axis in enumerate(y_axis_list):
             x_axis, x_label, color, facet = "groups", "Groups", "system", "~skew~n1"
             x_type, y_type, y_label = "continuous",  "log10", "{} [log]".format(y_header[idx])
             fname, w, h = f"micro_{y_axis}_line_{op_name}.png", 8, 6
-            PlotLines(data, x_axis, y_axis, x_label, y_label, x_type, y_type, color, linetype, facet, fname, w, h, None, None)
-    
+            PlotLines(sample_data, x_axis, y_axis, x_label, y_label, x_type, y_type, color, linetype, facet, fname, w, h, None, None)
+            
         overheadTypes = ["Total", "Materialize", "Execute"]
         for overheadType in overheadTypes:
             scond = f"where op_name='{op_name}' and overheadtype='{overheadType}'"
@@ -251,6 +281,21 @@ if plot_join:
             print(summary)
     
 if plot_ineq:
+    # plot |T1| = 1K and |T2| = 1M
+    where = f"WHERE overheadType<>'Execute' and op_name<>'CROSS_PRODUCT' and n2=1000000 {cond}"
+    data  = con.execute(template.format(g, g, g, where)).fetchdf()
+    d = { "BLOCKWISE_NL_JOIN": "BNL", "PIECEWISE_MERGE_JOIN": "Merge", "NESTED_LOOP_JOIN": "NL"}
+    data['op_label'] = data['op_name'].apply(d.get)
+    system_d = { "SmokedDuck": "SD", "Perm": "Logical"}
+    data['sys_label'] = data['system'].apply(system_d.get)
+    print(data)
+    # 1. x-axis: selectivity, y-axis: runtime, facet: cardinality
+    for idx, y_axis in enumerate(y_axis_list):
+        x_axis, x_label, color, facet = "sel", "Sel", "sys_label", "~op_label"
+        x_type, y_type, y_label = "continuous",  "continuous", "{}".format(y_header[idx])
+        fname, w, h = f"micro_{y_axis}_line_1M_1k_ineq.png", 7, 2.5
+        PlotLines(data, x_axis, y_axis, x_label, y_label, x_type, y_type, color, linetype, facet, fname, w, h, None, None)
+
     op_names = ["NESTED_LOOP_JOIN", "PIECEWISE_MERGE_JOIN", "BLOCKWISE_NL_JOIN"]
     for op_name in op_names:
         where = f"WHERE op_name IN ('{op_name}') {cond}"
@@ -304,6 +349,13 @@ if plot_join_mtn:
     for op_name in op_names:
         where = f"WHERE op_name IN ('{op_name}') {cond}"
         data  = con.execute(template.format(g, g, g, where)).fetchdf()
+        sample_data = con.execute("select * from data where overheadType<>'Execute'").df()
+
+        sample_data_1m = con.execute("select * from sample_data where n2=1000000 and skew=1").df()
+        sample_data_1m['skew'] = sample_data_1m['skew'].apply(lambda s: f"Skew: {s}")
+        print("--->")
+        print(sample_data_1m)
+        print("--->")
         print(data)
         # 1. x-axis: selectivity, y-axis: runtime, facet: cardinality
         for idx, y_axis in enumerate(y_axis_list):
@@ -311,17 +363,25 @@ if plot_join_mtn:
             #x_type, y_type, y_label = "continuous",  "continueous", "{}".format(y_header[idx])
             x_type, y_type, y_label = "continuous",  "log10", "{} [log]".format(y_header[idx])
             fname, w, h = f"micro_{y_axis}_line_{op_name}.png", 8, 6
-            PlotLines(data, x_axis, y_axis, x_label, y_label, x_type, y_type, color, linetype, facet, fname, w, h, None, None)
+            PlotLines(sample_data, x_axis, y_axis, x_label, y_label, x_type, y_type, color, linetype, facet, fname, w, h, None, None)
+        
+            x_axis, x_label, color, facet = "groups", "Groups", "system", "~skew"
+            #x_type, y_type, y_label = "continuous",  "continuous", "{}".format(y_header[idx])
+            x_type, y_type, y_label = "log10",  "continuous", "{}".format(y_header[idx])
+            fname, w, h = f"micro_{y_axis}_line_1M_{op_name}.png", 6, 2.75
+            PlotLines(sample_data_1m,  x_axis, y_axis, x_label, y_label, x_type, y_type, color, linetype, facet, fname, w, h)
+            
+    
     
         overheadTypes = ["Total", "Materialize", "Execute"]
         for overheadType in overheadTypes:
             scond = f"where op_name='{op_name}' and overheadtype='{overheadType}'"
             print(scond)
-            summary = con.execute(f"""select overheadtype, system, op_name, n1, n2,
+            summary = con.execute(f"""select overheadtype, system, op_name, n1, n2, groups,
                     avg(overhead), max(overhead), min(overhead),
                     avg(roverhead), max(roverhead), min(roverhead)
-                    from data {scond} group by overheadtype, system, op_name,  n1, n2
-                    order by overheadtype, system, op_name, n1, n2
+                    from data {scond} group by overheadtype, system, op_name,  n1, n2, groups
+                    order by overheadtype, system, op_name, n1, n2,groups
                     """).df()
             print(summary)
 
@@ -355,26 +415,57 @@ if plot_agg:
                       from wbaseline where lineage_type='SmokedDuck'
                       """).df()
     print(mdata)
-    where = f"where system IN ('Baseline', 'SmokedDuck', 'Perm')  {cond}"
+    where = f"where system IN ('Baseline', 'SmokedDuck', 'Perm', 'Perm_list', 'Smoke')  {cond}"
     data  = con.execute(template.format(g, g, g, where)).fetchdf()
+    sample_data = con.execute("select * from data where overheadType<>'Execute'").df()
     print(con.execute("select * from data where system='Perm'").df())
+
+    sample_data_10m = con.execute("select * from sample_data where card=10000000 and op_name<>'HASH_GROUP_BY' and system<>'Perm_list'").df()
+    d = { "PERFECT_HASH_GROUP_BY": "PERFECT HASH GROUP BY", "HASH_GROUP_BY_var": "HASH GROUP BY", "HASH_GROUP_BY": "HASH GROUP BY"}
+    sample_data_10m['op_label'] = sample_data_10m['op_name'].apply(d.get)
+    sample_data_10m['card'] = sample_data_10m['card'].apply(lambda v: v / 1000000)
     # 1. x-axis: selectivity, y-axis: runtime, facet: cardinality
+    system_d = { "SmokedDuck": "This work", "Perm": "Logical", "Smoke": "Smoke"}
+    sample_data_10m['sys_label'] = sample_data_10m['system'].apply(system_d.get)
+    sample_data_10m_10 = con.execute("select * from sample_data_10m where groups=10 and op_name='PERFECT_HASH_GROUP_BY' and overheadtype='Total'").df()
+    print(sample_data_10m_10)
     for idx, y_axis in enumerate(y_axis_list):
         x_axis, x_label, color, facet = "groups", "Groups (g)", "system", "~op_name~card"
         #x_type, y_type, y_label = "continuous",  "continueous", "{}".format(y_header[idx])
         x_type, y_type, y_label = "log10", "log10", "{} [log]".format(y_header[idx])
-        fname, w, h = "micro_{}_line_agg.png".format(y_axis), 8, 6
-        PlotLines(data, x_axis, y_axis, x_label, y_label, x_type, y_type, color, linetype, facet, fname, w, h, None, None)
-    
+        fname, w, h = "micro_{}_line_agg.png".format(y_axis), 6, 3
+        PlotLines(sample_data, x_axis, y_axis, x_label, y_label, x_type, y_type, color, linetype, facet, fname, w, h, None, None)
+        
+        x_axis, x_label, color, facet = "groups", "Groups (g)", "sys_label", "~card~op_label"
+        labeller="labeller(card=function(x)paste('# Tuples:',x,'M',sep=''))"
+        x_type, y_type, y_label = "log10", "log10", "{} [log]".format(y_header[idx])
+        xkwargs=None # dict(breaks=[10,100,1000], labels=list(map(esc,['10','100','1000'])))
+        fname, w, h = "micro_{}_10M_line_reg_agg.png".format(y_axis), 8, 2.5
+        PlotLines(sample_data_10m, x_axis, y_axis, x_label, y_label, x_type, y_type, color, linetype, facet, fname, w, h, None, xkwargs, labeller)
+
+        # plot 10M, 10 groups, Smoke, SD, Logical
+        x_axis, x_label, color, facet = "sys_label", "", "overheadtype", None
+        labeller="labeller(card=function(x)paste('# Tuples:',x,'M',sep=''))"
+        x_type, y_type, y_label = "discrete", "continuous", "{}".format(y_header[idx])
+        xkwargs=None # dict(breaks=[10,100,1000], labels=list(map(esc,['10','100','1000'])))
+        fname, w, h = "micro_baselines_{}_10M_10_line_reg_agg.png".format(y_axis), 4, 2.5
+        
+        p = ggplot(sample_data_10m_10, aes(x=x_axis, y=y_axis, fill=color, group=color))
+        p += axis_labels(x_label, y_label, x_type, y_type)
+        p += geom_bar(stat=esc('identity'), alpha=0.8, posiion=position_dodge(width=0.1), width=0.8)
+        p += legend_none
+        ggsave("figures/"+fname, p,  width=w, height=h, scale=0.8)
+        
     overheadTypes = ["Total", "Materialize", "Execute"]
     op_names = ["HASH_GROUP_BY", "HASH_GROUP_BY_var", "PERFECT_HASH_GROUP_BY"]
     for op_name, overheadType in product(op_names, overheadTypes):
         scond = f"where op_name='{op_name}' and overheadtype='{overheadType}'"
         print(scond)
-        summary = con.execute(f"""select overheadtype, system, op_name, groups,
+        
+        summary = con.execute(f"""select overheadtype, system, op_name, card, groups,
                 avg(overhead), max(overhead), min(overhead),
                 avg(roverhead), max(roverhead), min(roverhead)
-                from data {scond} group by overheadtype, system, op_name,  groups
-                order by overheadtype, system, op_name, groups
+                from data {scond} group by overheadtype, system, op_name, card, groups
+                order by overheadtype, system, op_name, card, groups
                 """).df()
         print(summary)

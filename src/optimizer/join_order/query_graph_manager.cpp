@@ -464,17 +464,20 @@ unique_ptr<LogicalOperator> QueryGraphManager::LeftRightOptimizations(unique_ptr
 // 2. Perform a distinct aggregation over B' to get B''
 // 3. Inner join A and B'', projecting out only columns from A
 // IMPORTANT: This logic only works for hash-based equijoins and one-to-one or one-to-many joins
+// ADD pragma to enable disable this
 unique_ptr<LogicalOperator> QueryGraphManager::UndoShortCircuiting(unique_ptr<LogicalOperator> op) {
 	for (idx_t i = 0; i < op->children.size(); i++) {
 		op->children[i] = UndoShortCircuiting(std::move(op->children[i]));
 	}
 
-	if (op->type == LogicalOperatorType::LOGICAL_COMPARISON_JOIN) {
+	if (op->type == LogicalOperatorType::LOGICAL_COMPARISON_JOIN || op->type == LogicalOperatorType::LOGICAL_DELIM_JOIN) {
     //std::cout << "undoShortCircuiting: 1" << std::endl;
 		auto &join = op->Cast<LogicalComparisonJoin>();
 
-		if (join.join_type == JoinType::SEMI) {
-     // std::cout << "undoShortCircuiting: 2" << std::endl;
+	  if  (join.join_type == JoinType::SEMI
+       || join.join_type == JoinType::MARK 
+		   || join.join_type == JoinType::SINGLE ) {
+      //std::cout << "undoShortCircuiting: 2" << std::endl;
 			D_ASSERT(join.conditions.size() == 1);
 			D_ASSERT(join.conditions[0].comparison == ExpressionType::COMPARE_EQUAL);
 			D_ASSERT(join.conditions[0].right->type == ExpressionType::BOUND_COLUMN_REF);
@@ -494,7 +497,7 @@ unique_ptr<LogicalOperator> QueryGraphManager::UndoShortCircuiting(unique_ptr<Lo
 			distinct->children.push_back(std::move(projection));
 
 			// SEMIJOIN -> INNER JOIN
-			join.join_type = JoinType::INNER;
+		//	join.join_type = JoinType::INNER;
 			op->children[1] = std::move(distinct);
 		}
 	}

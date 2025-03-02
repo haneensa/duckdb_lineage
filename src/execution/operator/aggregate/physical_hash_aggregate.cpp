@@ -207,11 +207,17 @@ public:
 	vector<LogicalType> payload_types;
 	//! Whether or not the aggregate is finished
 	bool finished = false;
+#ifdef LINEAGE
+  vector<Vector> lineage_smoke;
+#endif
 };
 
 class HashAggregateLocalSinkState : public LocalSinkState {
 public:
 	HashAggregateLocalSinkState(const PhysicalHashAggregate &op, ExecutionContext &context) {
+#ifdef LINEAGE
+        offset = 0;
+#endif
 
 		auto &payload_types = op.grouped_aggregate_data.payload_types;
 		if (!payload_types.empty()) {
@@ -236,6 +242,9 @@ public:
 	DataChunk aggregate_input_chunk;
 	vector<HashAggregateGroupingLocalState> grouping_states;
 	AggregateFilterDataSet filter_set;
+#ifdef LINEAGE
+  idx_t offset;
+#endif
 };
 
 void PhysicalHashAggregate::SetMultiScan(GlobalSinkState &state) {
@@ -351,7 +360,6 @@ SinkResultType PhysicalHashAggregate::Sink(ExecutionContext &context, DataChunk 
 	auto &local_state = input.local_state.Cast<HashAggregateLocalSinkState>();
 	auto &global_state = input.global_state.Cast<HashAggregateGlobalSinkState>();
 
-
 	if (distinct_collection_info) {
 		SinkDistinct(context, chunk, input);
 	}
@@ -363,6 +371,22 @@ SinkResultType PhysicalHashAggregate::Sink(ExecutionContext &context, DataChunk 
 	DataChunk &aggregate_input_chunk = local_state.aggregate_input_chunk;
 	auto &aggregates = grouped_aggregate_data.aggregates;
 	idx_t aggregate_input_idx = 0;
+#ifdef LINEAGE
+  if (lineage_manager && lineage_manager->smoke) {
+    if (local_state.offset == 0) {
+      DataChunk annotations;
+      annotations.Initialize(context.client, {LogicalType::ROW_TYPE});
+      annotations.SetCardinality(chunk.size());
+      annotations.data[0].Sequence(local_state.offset, 1, chunk.size());
+      chunk.Fuse(annotations);
+    } else {
+      chunk.data[chunk.ColumnCount()-1].Sequence(local_state.offset, 1, chunk.size());
+    }
+    local_state.offset += chunk.size();
+  }
+#endif
+
+
 
 	// Populate the aggregate child vectors
 	for (auto &aggregate : aggregates) {
@@ -881,6 +905,20 @@ SourceResultType PhysicalHashAggregate::GetData(ExecutionContext &context, DataC
 		if (res == SourceResultType::BLOCKED) {
 			return res;
 		}
+
+#ifdef LINEAGE
+  if (lineage_manager && lineage_manager->smoke) {
+    DataChunk annotations;
+    chunk.Split(annotations, chunk.ColumnCount()-1);
+    sink_gstate.lineage_smoke.push_back(move(annotations.data[0]));
+
+    auto typ = {LogicalType::LIST(LogicalType::ROW_TYPE)};
+    DataChunk newAnn;
+    newAnn.Initialize(context.client, typ, chunk.size());
+    chunk.Fuse(newAnn);
+  }
+#endif
+
 		if (chunk.size() != 0) {
 			return SourceResultType::HAVE_MORE_OUTPUT;
 		}

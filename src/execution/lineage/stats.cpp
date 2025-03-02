@@ -97,7 +97,7 @@ std::vector<int64_t> OperatorLineage::GatherStats() {
     chunk_count += log[tkey]->perfect_probe_ht_log.size();
     for (int k = 0; k < log[tkey]->perfect_probe_ht_log.size(); k++) {
       idx_t count = log[tkey]->perfect_probe_ht_log[k].count;
-      auto left = log[tkey]->perfect_probe_ht_log[k].left.get();
+      auto left = log[tkey]->perfect_probe_ht_log[k].left;
       local_lineage_size_mb += count * sizeof(sel_t);
       if (left != nullptr) {
         local_lineage_size_mb += sizeof(perfect_join_artifact) + count * sizeof(sel_t);

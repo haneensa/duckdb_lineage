@@ -91,10 +91,10 @@ void OperatorLineage::PostProcess() {
       for (int k = 0; k < log[tkey]->scatter_sel_log.size(); k++) {
         idx_t res_count = log[tkey]->scatter_sel_log[k].count;
         idx_t in_start = log[tkey]->scatter_sel_log[k].in_start;
-        auto payload = log[tkey]->scatter_sel_log[k].addresses.get();
+        auto payload = log[tkey]->scatter_sel_log[k].addresses;
         //std::cout << k << " " << res_count << std::endl;
         if (log[tkey]->scatter_sel_log[k].sel) {
-          auto sel = log[tkey]->scatter_sel_log[k].sel.get();
+          auto sel = log[tkey]->scatter_sel_log[k].sel;
           for (idx_t j=0; j < res_count; ++j) {
             if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
               log_index->codes[payload[j]] = sel[j] + in_start;
@@ -486,8 +486,8 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
       chunk.data[rhs_col].Initialize(false, count);
       int64_t* lhs_col_data = (int64_t*)chunk.data[lhs_col].GetData();
       int64_t* rhs_col_data = (int64_t*)chunk.data[rhs_col].GetData();
-      auto left = log->perfect_probe_ht_log[lsn].left.get();
-      auto right = log->perfect_probe_ht_log[lsn].right.get();
+      auto left = log->perfect_probe_ht_log[lsn].left;
+      auto right = log->perfect_probe_ht_log[lsn].right;
 
       if (left == nullptr) {
         for (idx_t j=0; j < count; ++j) {
@@ -507,8 +507,8 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
       int lsn = log->execute_internal[data_idx].first-1;
       idx_t count = log->join_gather_log[lsn].count;
       idx_t in_start = log->join_gather_log[lsn].in_start;
-      auto payload = log->join_gather_log[lsn].rhs.get();
-      auto lhs = log->join_gather_log[lsn].lhs.get();
+      auto payload = log->join_gather_log[lsn].rhs;
+      auto lhs = log->join_gather_log[lsn].lhs;
       
       idx_t lhs_col = 0;
       idx_t rhs_col = 1;

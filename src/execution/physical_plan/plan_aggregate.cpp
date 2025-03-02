@@ -181,6 +181,34 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalAggregate 
 			    context, op.types, std::move(op.expressions), op.estimated_cardinality);
 		}
 	} else {
+#ifdef LINEAGE
+  if (lineage_manager && lineage_manager->smoke) {
+    auto last_col = op.groups.size();
+    for (auto &expr : op.expressions) {
+      D_ASSERT(expr->expression_class == ExpressionClass::BOUND_AGGREGATE);
+      D_ASSERT(expr->IsAggregate());
+      auto &aggr = expr->Cast<BoundAggregateExpression>();
+      D_ASSERT(!aggr.IsDistinct());
+      D_ASSERT(aggr.function.combine);
+      for (auto &child : aggr.children) {
+        last_col++;
+      }
+    }
+    auto &catalog = Catalog::GetSystemCatalog(context);
+    auto &entry = catalog.GetEntry<AggregateFunctionCatalogEntry>(
+        context, DEFAULT_SCHEMA, "list");
+    auto list_function = entry.functions.GetFunctionByArguments(context, {LogicalType::ROW_TYPE});
+    auto rowid_colref = make_uniq_base<Expression, BoundReferenceExpression>(LogicalType::ROW_TYPE, last_col);
+    vector<unique_ptr<Expression>> children;
+    children.push_back(std::move(rowid_colref));
+    unique_ptr<FunctionData> bind_info = list_function.bind(context, list_function, children);
+    auto list_aggregate = make_uniq<BoundAggregateExpression>(list_function, std::move(children), nullptr,
+        std::move(bind_info), AggregateType::NON_DISTINCT);
+    op.expressions.push_back(std::move(list_aggregate));
+    op.types.push_back(LogicalType::LIST(LogicalType::ROW_TYPE));
+  }
+#endif
+
 		// groups! create a GROUP BY aggregator
 		// use a perfect hash aggregate if possible
 		vector<idx_t> required_bits;

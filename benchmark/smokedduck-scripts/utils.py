@@ -12,6 +12,8 @@ def get_lineage_type(args):
         lineage_type = "SmokedDuck"
     elif args.perm:
         lineage_type = "Perm"
+    elif args.smoke:
+        lineage_type = "Smoke"
     else:
         lineage_type = "Baseline"
     return lineage_type
@@ -51,6 +53,7 @@ def getMat(plan):
     """
     plan= plan.replace("'", "\"")
     plan = json.loads(plan)
+    print(plan)
     op1 = find_node_wprefix("CREATE_TABLE_AS", plan)
     op2 = find_node_wprefix("RESULT_COLLECTOR", plan)
     op3 = find_node_wprefix("BATCH_CREATE_TABLE_AS", plan)
@@ -102,6 +105,9 @@ def execute(Q, con, args):
     Q = " ".join(Q.split())
     if args.lineage:
         con.execute("PRAGMA enable_lineage")
+    if args.smoke:
+        con.execute("PRAGMA disable_filter_pushdown")
+        con.execute("PRAGMA enable_smoke")
     if args.profile:
         con.execute("PRAGMA enable_profiling='json'")
         con.execute("PRAGMA profiling_output='{}_plan.json';".format(args.qid))
@@ -114,6 +120,9 @@ def execute(Q, con, args):
         con.execute("PRAGMA disable_profiling;")
     if args.lineage:
         con.execute("PRAGMA disable_lineage")
+    if args.smoke:
+        con.execute("PRAGMA disable_smoke")
+        con.execute("PRAGMA enable_filter_pushdown")
     return df, end - start
 
 def DropLineageTables(con):
@@ -141,7 +150,11 @@ def Run(q, args, con, table_name=None):
         con.execute("PRAGMA clear_lineage")
     dur_acc += duration
     if args.show_output:
-        print(df)
+        print("----output----")
+        if table_name:
+            print(con.execute(f"select  * from {table_name}").df())
+        else:
+            print(df)
     avg = dur_acc/args.repeat
     print("Avg Time in sec: ", avg, " output size: ", len(df)) 
     return avg, df

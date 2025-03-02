@@ -68,7 +68,8 @@ shared_ptr<OperatorLineage> LineageManager::CreateOperatorLineage(ClientContext 
 int LineageManager::PlanAnnotator(PhysicalOperator *op, int counter) {
   if (op->type == PhysicalOperatorType::RESULT_COLLECTOR) {
 		PhysicalOperator* plan = &dynamic_cast<PhysicalResultCollector*>(op)->plan;
-    if (persist) std::cout << plan->ToString() << std::endl;
+    // if (persist) 
+    //std::cout << plan->ToString() << std::endl;
 		counter = PlanAnnotator(plan, counter);
 	}
 

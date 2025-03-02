@@ -17,6 +17,13 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalOrder &op)
 		} else {
 			projections = std::move(op.projections);
 		}
+    
+#ifdef LINEAGE
+    if (lineage_manager && lineage_manager->smoke) {
+      op.types.push_back(LogicalType::ROW_TYPE);
+      projections.push_back(projections.size());
+    }
+#endif
 		auto order =
 		    make_uniq<PhysicalOrder>(op.types, std::move(op.orders), std::move(projections), op.estimated_cardinality);
 		order->children.push_back(std::move(plan));
